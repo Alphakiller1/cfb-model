@@ -89,23 +89,30 @@ border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30
 .side--home{justify-content:flex-end;text-align:right}
 .side-logo{width:44px;height:44px;flex:0 0 44px;object-fit:contain;
 filter:drop-shadow(0 2px 6px rgba(0,0,0,.55))}
-.side-id{min-width:0}
+.side-id{min-width:0;flex:1 1 auto}
 .side-name{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.01em;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.side-conf{color:var(--text-3);font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;margin-top:2px}
+.side-conf{color:var(--text-3);font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-accent{width:3px;height:34px;border-radius:2px;flex:0 0 3px;opacity:.85}
+.side-score{font-family:var(--display);font-weight:800;font-size:30px;line-height:1;
+font-variant-numeric:tabular-nums;color:var(--text);flex:0 0 auto;padding:0 2px;font-stretch:125%}
+.side{flex:1;min-width:0}
+.side--home .side-score{order:-1}
 .game-mid{display:flex;flex-direction:column;align-items:center;gap:3px;padding:0 6px}
 .game-at{color:var(--text-4);font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.16em}
 .game-when{color:var(--text-3);font-size:11px;white-space:nowrap}
 
 /* numbers strip: three equal columns, mirrored around the centre */
-.game-nums{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border-soft);
+.game-nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border-soft);
 background:rgba(8,9,15,.4)}
 .gn{padding:12px 10px;text-align:center;border-right:1px solid var(--border-soft)}
 .gn:last-child{border-right:0}
 .gn-l{display:block;color:var(--text-3);font-size:10.5px;font-weight:700;text-transform:uppercase;
 letter-spacing:.12em}
-.gn-v{display:block;font-family:var(--display);font-weight:800;font-size:21px;margin-top:5px;
+.gn-v{display:block;font-family:var(--display);font-weight:800;font-size:20px;margin-top:5px;
+font-variant-numeric:tabular-nums}
+.gn-sub{display:block;color:var(--text-4);font-size:10.5px;margin-top:3px;min-height:13px;
 font-variant-numeric:tabular-nums}
 .gn-v--edge-pos{color:var(--ca-teal)}
 .gn-v--edge-neg{color:var(--ca-red)}
@@ -191,7 +198,9 @@ footer p+p{margin-top:8px}
   .side-conf{font-size:10px}
   .side{gap:8px}
   .game-top{padding:14px 12px 11px;gap:6px}
-  .gn-v{font-size:18px}
+  .gn-v{font-size:16px}
+  .side-score{font-size:22px}
+  .gn{padding:10px 4px}
   .authority-gates .gate{max-width:100%;overflow-wrap:anywhere}
   .bd-row,.bd-head-row{grid-template-columns:1fr auto auto auto;gap:6px;font-size:11.5px}
   .bd-a,.bd-h,.bd-c{min-width:48px}

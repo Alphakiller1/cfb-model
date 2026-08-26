@@ -124,11 +124,16 @@ class TeamForm:
     def_successRate: float | None = None
     def_explosiveness: float | None = None
     def_stuffRate: float | None = None
+    # Pace. Used only by the totals model -- deliberately outside FIELDS so the
+    # margin coefficients and `complete()` are unaffected by its availability.
+    drives: float | None = None
+    plays: float | None = None
 
     FIELDS = ("off_ppa", "off_successRate", "off_explosiveness", "off_stuffRate",
               "def_ppa", "def_successRate", "def_explosiveness", "def_stuffRate")
 
     def complete(self) -> bool:
+        """Margin-feature completeness. Pace is checked separately by `totals`."""
         return all(getattr(self, f) is not None for f in self.FIELDS)
 
 

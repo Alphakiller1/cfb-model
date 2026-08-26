@@ -21,6 +21,18 @@ than hiding it. Walk-forward on **3,256 out-of-sample FBS games** (2019, 2021–
 | Ratings + raw efficiency | 12.7883 | +0.6287 |
 | Ratings only | 12.9749 | +0.8154 |
 
+Totals, on the same games:
+
+| Candidate | MAE |
+| --- | ---: |
+| Market total | **12.5055** |
+| Model total | 13.0446 |
+| League-mean total | 13.6544 |
+
+Projected scores are derived from the two: `home = (total + margin) / 2`. They
+inherit the error of both models, so a scoreline is a centre of mass rather than
+a prediction — the total residual SD is 16.36 against an actual SD of 17.14.
+
 ATS where the model disagrees with the spread: **1651–1579–26 = 51.11%**,
 95% CI **[49.39%, 52.84%]**, breakeven 52.38%.
 
@@ -64,6 +76,7 @@ python -m cfbmodel.cli board --season 2026 --week 1
 | `ratings.py` | Opponent-adjusted, blowout-capped power ratings. |
 | `efficiency.py` | Opponent adjustment — solves offense and defense jointly, like the ratings. |
 | `matrix.py` | Fitted matrix. Weight groups are the interpretation; `COEFFICIENTS` is the predictor. |
+| `totals.py` | Combined-points model and the projected scoreline derived from it. |
 | `forecast.py` | Market-anchored game forecast, with a validated-regime flag. |
 | `authority.py` | What a forecast is *allowed* to be used for. |
 
@@ -97,5 +110,5 @@ covered. On the 2026 week 1 slate the model read Indiana −14.1 against a marke
 ## Tests
 
 ```bash
-python -m pytest -q     # 51 passed
+python -m pytest -q     # 74 passed
 ```

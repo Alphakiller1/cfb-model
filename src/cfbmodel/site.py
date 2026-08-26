@@ -24,7 +24,7 @@ from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import matrix, preseason, ratings, teams
+from cfbmodel import matrix, preseason, ratings, teams, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -136,7 +136,7 @@ def _tiles() -> str:
     ) + "</div>"
 
 
-def _side(season: int, school: str, home: bool) -> str:
+def _side(season: int, school: str, home: bool, score: float | None = None) -> str:
     team = teams.get(season, school)
     logo = (f'<img class="side-logo" src="{esc(team.logo)}" alt="" loading="lazy">'
             if team.logo else '<span class="side-logo"></span>')
@@ -144,10 +144,12 @@ def _side(season: int, school: str, home: bool) -> str:
               if team.color else "")
     conf = f'<div class="side-conf">{esc(team.conference)}</div>' if team.conference else ""
     ident = f'<div class="side-id"><div class="side-name">{esc(school)}</div>{conf}</div>'
-    # A true reflection: away reads accent|logo|name, home reads name|logo|accent, so the
-    # halves mirror around the centre column rather than merely right-aligning. The earlier
-    # row-reverse pushed the accent to the inside edge on the home side, which broke it.
-    body = f'{ident}{logo}{accent}' if home else f'{accent}{logo}{ident}'
+    pts = f'<div class="side-score">{score:.0f}</div>' if score is not None else ""
+    # A true reflection: away reads accent|logo|name|score, home reads score|name|logo|accent,
+    # so the halves mirror around the centre column and the two projected scores sit either
+    # side of it like a scoreboard. The earlier row-reverse pushed the accent to the inside
+    # edge on the home side, which broke the reflection.
+    body = f'{pts}{ident}{logo}{accent}' if home else f'{accent}{logo}{ident}{pts}'
     return f'<div class="side{" side--home" if home else ""}">{body}</div>'
 
 
@@ -235,6 +237,15 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float]) -> str:
         "BET": "badge-bet", "MONITOR": "badge-monitor",
         "REVIEW": "badge-review", "AVOID": "badge-avoid",
     }.get(f.action.value, "badge-avoid")
+    # A league-mean fallback total is marked so a scoreline built on it is not
+    # read as a modelled projection.
+    total_star = "" if f.total_modelled else "*"
+    if f.market_total is not None:
+        total_sub = f"mkt {f.market_total:.1f}"
+    elif not f.total_modelled:
+        total_sub = "league mean"
+    else:
+        total_sub = ""
     note = "model only — no market price" if not f.has_price else (
         "published margin = market at lam 0")
     if not f.used_efficiency:
@@ -243,15 +254,18 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float]) -> str:
     neutral = '<div class="game-when">neutral site</div>' if f.neutral else ""
     return f"""<article class="game">
 <div class="game-top">
-{_side(season, f.away, home=False)}
+{_side(season, f.away, home=False, score=f.projected_away_score)}
 <div class="game-mid"><span class="game-at">AT</span>{when}{neutral}</div>
-{_side(season, f.home, home=True)}
+{_side(season, f.home, home=True, score=f.projected_home_score)}
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v{"" if f.model_margin is not None else " gn-v--na"}">{_fmt(f.model_margin)}</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v{"" if f.market_margin is not None else " gn-v--na"}">{_fmt(f.market_margin)}</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v{"" if f.projected_total is not None else " gn-v--na"}">{_fmt(f.projected_total, sign=False)}{total_star}</span>
+<span class="gn-sub">{total_sub}</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v {edge_cls}">{_fmt(f.edge_points)}</span></div>
 </div>
@@ -319,6 +333,19 @@ overlap. Adjusting is worth 0.30 points of MAE overall and 0.70 in weeks 5–7.<
 <p>It also revived a signal: raw explosiveness fitted at 0.016 and looked
 worthless. Opponent-adjusted it fits at 0.153. The feature was never weak — the
 measurement was confounded.</p></div>
+
+<div class="mth-card"><div class="mth-h">Totals &amp; projected scores</div>
+<p>Margin asks who is better, so it uses feature <em>differences</em>. A total asks how
+much scoring the two teams generate together, so it uses <em>sums</em> plus pace —
+drives and plays per game. CFB tempo varies far more than the NFL&rsquo;s.</p>
+<table class="mth-tbl">
+<tr><td>League-mean total</td><td>13.6544</td></tr>
+<tr><td>Model total</td><td>13.0446</td></tr>
+<tr><td>Market total</td><td>12.5055</td></tr>
+<tr><td>Total residual SD</td><td>{totals.TOTAL_SD:.2f}</td></tr></table>
+<p>Scores are algebra on the two projections: home = (total + margin) / 2. They inherit
+the error of <em>both</em> models, so read a scoreline as a centre of mass, not a
+prediction. A total marked <b>*</b> is the league mean, not a modelled figure.</p></div>
 
 <div class="mth-card"><div class="mth-h">Point-in-time</div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
@@ -421,6 +448,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     rating_table = cli.build_ratings(season, week)
     forms = cli._forms(season, week)
     market = cli._market(season, week)
+    market_total = cli._market_totals(season, week)
     slate = [g for g in cli.cfbd.games(season, week=week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
 
@@ -432,6 +460,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             neutral=bool(g.get("neutralSite")),
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
+            market_total=market_total.get((home, away)),
             authority=authority, week=week,
         )
         kickoff = (g.get("startDate") or "")[:10] or None

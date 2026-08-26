@@ -223,23 +223,30 @@ border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30
 .side--home{justify-content:flex-end;text-align:right}
 .side-logo{width:44px;height:44px;flex:0 0 44px;object-fit:contain;
 filter:drop-shadow(0 2px 6px rgba(0,0,0,.55))}
-.side-id{min-width:0}
+.side-id{min-width:0;flex:1 1 auto}
 .side-name{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.01em;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.side-conf{color:var(--text-3);font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;margin-top:2px}
+.side-conf{color:var(--text-3);font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-accent{width:3px;height:34px;border-radius:2px;flex:0 0 3px;opacity:.85}
+.side-score{font-family:var(--display);font-weight:800;font-size:30px;line-height:1;
+font-variant-numeric:tabular-nums;color:var(--text);flex:0 0 auto;padding:0 2px;font-stretch:125%}
+.side{flex:1;min-width:0}
+.side--home .side-score{order:-1}
 .game-mid{display:flex;flex-direction:column;align-items:center;gap:3px;padding:0 6px}
 .game-at{color:var(--text-4);font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.16em}
 .game-when{color:var(--text-3);font-size:11px;white-space:nowrap}
 
 /* numbers strip: three equal columns, mirrored around the centre */
-.game-nums{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border-soft);
+.game-nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border-soft);
 background:rgba(8,9,15,.4)}
 .gn{padding:12px 10px;text-align:center;border-right:1px solid var(--border-soft)}
 .gn:last-child{border-right:0}
 .gn-l{display:block;color:var(--text-3);font-size:10.5px;font-weight:700;text-transform:uppercase;
 letter-spacing:.12em}
-.gn-v{display:block;font-family:var(--display);font-weight:800;font-size:21px;margin-top:5px;
+.gn-v{display:block;font-family:var(--display);font-weight:800;font-size:20px;margin-top:5px;
+font-variant-numeric:tabular-nums}
+.gn-sub{display:block;color:var(--text-4);font-size:10.5px;margin-top:3px;min-height:13px;
 font-variant-numeric:tabular-nums}
 .gn-v--edge-pos{color:var(--ca-teal)}
 .gn-v--edge-neg{color:var(--ca-red)}
@@ -325,7 +332,9 @@ footer p+p{margin-top:8px}
   .side-conf{font-size:10px}
   .side{gap:8px}
   .game-top{padding:14px 12px 11px;gap:6px}
-  .gn-v{font-size:18px}
+  .gn-v{font-size:16px}
+  .side-score{font-size:22px}
+  .gn{padding:10px 4px}
   .authority-gates .gate{max-width:100%;overflow-wrap:anywhere}
   .bd-row,.bd-head-row{grid-template-columns:1fr auto auto auto;gap:6px;font-size:11.5px}
   .bd-a,.bd-h,.bd-c{min-width:48px}
@@ -354,7 +363,7 @@ with an explicit gate on what the numbers are allowed to be used for.</p>
 <div class="hero-meta"><span class="pill pill-ok">validated regime</span>
 <span class="pill">58 games</span>
 <span class="pill">136 FBS teams rated</span>
-<span class="pill">generated 2026-08-26 19:09 UTC</span></div>
+<span class="pill">generated 2026-08-26 19:50 UTC</span></div>
 <div class="authority">
 <div class="authority-head">
 <span class="authority-level">RESEARCH_ONLY</span>
@@ -377,15 +386,18 @@ factor-by-factor breakdown.</p>
 
 <div class="games"><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#7bafd4"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/153.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">North Carolina</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#7bafd4"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/153.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">North Carolina</div><div class="side-conf">ACC</div></div><div class="side-score">13</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Wake Forest</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/154.png" alt="" loading="lazy"><span class="side-accent" style="background:#ceb888"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Wake Forest</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/154.png" alt="" loading="lazy"><span class="side-accent" style="background:#ceb888"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+15.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+3.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">42.3</span>
+<span class="gn-sub">mkt 37.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+12.4</span></div>
 </div>
@@ -401,15 +413,18 @@ home side&rsquo;s margin contribution: positive favours Wake Forest.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#8c0b42"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/166.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">New Mexico State</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#8c0b42"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/166.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">New Mexico State</div><div class="side-conf">Conference USA</div></div><div class="side-score">11</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Tennessee</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2633.png" alt="" loading="lazy"><span class="side-accent" style="background:#ff8200"></span></div>
+<div class="side side--home"><div class="side-score">44</div><div class="side-id"><div class="side-name">Tennessee</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2633.png" alt="" loading="lazy"><span class="side-accent" style="background:#ff8200"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+32.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+41.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">55.1</span>
+<span class="gn-sub">mkt 60.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-8.8</span></div>
 </div>
@@ -425,15 +440,18 @@ home side&rsquo;s margin contribution: positive favours Tennessee.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#4d1979"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2628.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">TCU</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#4d1979"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2628.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">TCU</div><div class="side-conf">Big 12</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">BYU</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/252.png" alt="" loading="lazy"><span class="side-accent" style="background:#003da5"></span></div>
+<div class="side side--home"><div class="side-score">33</div><div class="side-id"><div class="side-name">BYU</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/252.png" alt="" loading="lazy"><span class="side-accent" style="background:#003da5"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+10.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+2.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">54.8</span>
+<span class="gn-sub">mkt 51.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+8.0</span></div>
 </div>
@@ -449,15 +467,18 @@ home side&rsquo;s margin contribution: positive favours BYU.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#862633"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2653.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Troy</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#862633"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2653.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Troy</div><div class="side-conf">Sun Belt</div></div><div class="side-score">17</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-14</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Old Dominion</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/295.png" alt="" loading="lazy"><span class="side-accent" style="background:#043657"></span></div>
+<div class="side side--home"><div class="side-score">34</div><div class="side-id"><div class="side-name">Old Dominion</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/295.png" alt="" loading="lazy"><span class="side-accent" style="background:#043657"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+16.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+9.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">51.3</span>
+<span class="gn-sub">mkt 53.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+7.1</span></div>
 </div>
@@ -473,15 +494,18 @@ home side&rsquo;s margin contribution: positive favours Old Dominion.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#005bbb"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2084.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Buffalo</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#005bbb"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2084.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Buffalo</div><div class="side-conf">Mid-American</div></div><div class="side-score">20</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-13</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Central Michigan</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2117.png" alt="" loading="lazy"><span class="side-accent" style="background:#6a0032"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Central Michigan</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2117.png" alt="" loading="lazy"><span class="side-accent" style="background:#6a0032"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+8.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+2.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">48.5</span>
+<span class="gn-sub">mkt 44.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+6.4</span></div>
 </div>
@@ -497,15 +521,18 @@ home side&rsquo;s margin contribution: positive favours Central Michigan.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0c2340"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/87.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Notre Dame</div><div class="side-conf">FBS Independents</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0c2340"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/87.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Notre Dame</div><div class="side-conf">FBS Independents</div></div><div class="side-score">30</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Pittsburgh</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/221.png" alt="" loading="lazy"><span class="side-accent" style="background:#003594"></span></div>
+<div class="side side--home"><div class="side-score">24</div><div class="side-id"><div class="side-name">Pittsburgh</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/221.png" alt="" loading="lazy"><span class="side-accent" style="background:#003594"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-6.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-12.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.7</span>
+<span class="gn-sub">mkt 55.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+6.0</span></div>
 </div>
@@ -521,15 +548,18 @@ home side&rsquo;s margin contribution: positive favours Pittsburgh.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#b3a369"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/59.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Georgia Tech</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#b3a369"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/59.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Georgia Tech</div><div class="side-conf">ACC</div></div><div class="side-score">34</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Boston College</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/103.png" alt="" loading="lazy"><span class="side-accent" style="background:#8c2232"></span></div>
+<div class="side side--home"><div class="side-score">23</div><div class="side-id"><div class="side-name">Boston College</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/103.png" alt="" loading="lazy"><span class="side-accent" style="background:#8c2232"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-10.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-16.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.6</span>
+<span class="gn-sub">mkt 61.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+5.6</span></div>
 </div>
@@ -545,15 +575,18 @@ home side&rsquo;s margin contribution: positive favours Boston College.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#dc4405"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/204.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Oregon State</div><div class="side-conf">Pac-12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#dc4405"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/204.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Oregon State</div><div class="side-conf">Pac-12</div></div><div class="side-score">29</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Tulsa</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/202.png" alt="" loading="lazy"><span class="side-accent" style="background:#003595"></span></div>
+<div class="side side--home"><div class="side-score">26</div><div class="side-id"><div class="side-name">Tulsa</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/202.png" alt="" loading="lazy"><span class="side-accent" style="background:#003595"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-3.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+1.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">54.9</span>
+<span class="gn-sub">mkt 50.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-5.0</span></div>
 </div>
@@ -569,15 +602,18 @@ home side&rsquo;s margin contribution: positive favours Tulsa.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#1e4d2b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/36.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Colorado State</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#1e4d2b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/36.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Colorado State</div><div class="side-conf">Mountain West</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">New Mexico</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/167.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
+<div class="side side--home"><div class="side-score">33</div><div class="side-id"><div class="side-name">New Mexico</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/167.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+10.4</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+15.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">55.4</span>
+<span class="gn-sub">mkt 53.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.9</span></div>
 </div>
@@ -593,15 +629,18 @@ home side&rsquo;s margin contribution: positive favours New Mexico.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#003366"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2226.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Florida Atlantic</div><div class="side-conf">American Athletic</div></div></div>
+<div class="side"><span class="side-accent" style="background:#003366"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2226.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Florida Atlantic</div><div class="side-conf">American Athletic</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Tulane</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2655.png" alt="" loading="lazy"><span class="side-accent" style="background:#006747"></span></div>
+<div class="side side--home"><div class="side-score">34</div><div class="side-id"><div class="side-name">Tulane</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2655.png" alt="" loading="lazy"><span class="side-accent" style="background:#006747"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+12.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+16.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.6</span>
+<span class="gn-sub">mkt 60.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.9</span></div>
 </div>
@@ -617,15 +656,18 @@ home side&rsquo;s margin contribution: positive favours Tulane.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00539f"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/48.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Delaware</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00539f"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/48.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Delaware</div><div class="side-conf">Conference USA</div></div><div class="side-score">32</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div><div class="game-when">neutral site</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Sam Houston</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2534.png" alt="" loading="lazy"><span class="side-accent" style="background:#f56423"></span></div>
+<div class="side side--home"><div class="side-score">25</div><div class="side-id"><div class="side-name">Sam Houston</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2534.png" alt="" loading="lazy"><span class="side-accent" style="background:#f56423"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-7.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-12.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.4</span>
+<span class="gn-sub">mkt 56.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+4.8</span></div>
 </div>
@@ -641,15 +683,18 @@ home side&rsquo;s margin contribution: positive favours Sam Houston.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#cc0033"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/12.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Arizona</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#cc0033"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/12.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Arizona</div><div class="side-conf">Big 12</div></div><div class="side-score">27</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Cincinnati</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2132.png" alt="" loading="lazy"><span class="side-accent" style="background:#000000"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Cincinnati</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2132.png" alt="" loading="lazy"><span class="side-accent" style="background:#000000"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+1.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+6.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.1</span>
+<span class="gn-sub">mkt 56.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.7</span></div>
 </div>
@@ -665,15 +710,18 @@ home side&rsquo;s margin contribution: positive favours Cincinnati.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#232d4b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/258.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Virginia</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#232d4b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/258.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Virginia</div><div class="side-conf">ACC</div></div><div class="side-score">29</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Duke</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/150.png" alt="" loading="lazy"><span class="side-accent" style="background:#00539b"></span></div>
+<div class="side side--home"><div class="side-score">30</div><div class="side-id"><div class="side-name">Duke</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/150.png" alt="" loading="lazy"><span class="side-accent" style="background:#00539b"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+0.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+5.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">58.7</span>
+<span class="gn-sub">mkt 60.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.5</span></div>
 </div>
@@ -689,15 +737,18 @@ home side&rsquo;s margin contribution: positive favours Duke.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0b2240"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2649.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Toledo</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0b2240"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2649.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Toledo</div><div class="side-conf">Mid-American</div></div><div class="side-score">28</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-13</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Miami (OH)</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/193.png" alt="" loading="lazy"><span class="side-accent" style="background:#c41230"></span></div>
+<div class="side side--home"><div class="side-score">18</div><div class="side-id"><div class="side-name">Miami (OH)</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/193.png" alt="" loading="lazy"><span class="side-accent" style="background:#c41230"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-10.2</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-5.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">46.6</span>
+<span class="gn-sub">mkt 44.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.4</span></div>
 </div>
@@ -713,15 +764,18 @@ home side&rsquo;s margin contribution: positive favours Miami (OH).</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#be0000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/254.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Utah</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#be0000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/254.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Utah</div><div class="side-conf">Big 12</div></div><div class="side-score">35</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Baylor</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/239.png" alt="" loading="lazy"><span class="side-accent" style="background:#154734"></span></div>
+<div class="side side--home"><div class="side-score">21</div><div class="side-id"><div class="side-name">Baylor</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/239.png" alt="" loading="lazy"><span class="side-accent" style="background:#154734"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-13.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-9.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.8</span>
+<span class="gn-sub">mkt 60.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.4</span></div>
 </div>
@@ -737,15 +791,18 @@ home side&rsquo;s margin contribution: positive favours Baylor.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#841617"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/201.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Oklahoma</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#841617"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/201.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Oklahoma</div><div class="side-conf">SEC</div></div><div class="side-score">23</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Alabama</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/333.png" alt="" loading="lazy"><span class="side-accent" style="background:#9e1b32"></span></div>
+<div class="side side--home"><div class="side-score">25</div><div class="side-id"><div class="side-name">Alabama</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/333.png" alt="" loading="lazy"><span class="side-accent" style="background:#9e1b32"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+2.2</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+6.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">47.9</span>
+<span class="gn-sub">mkt 45.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.3</span></div>
 </div>
@@ -761,15 +818,18 @@ home side&rsquo;s margin contribution: positive favours Alabama.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#bf5700"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/251.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Texas</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#bf5700"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/251.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Texas</div><div class="side-conf">SEC</div></div><div class="side-score">21</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Georgia</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/61.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Georgia</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/61.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+7.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+3.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">50.7</span>
+<span class="gn-sub">mkt 50.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+4.2</span></div>
 </div>
@@ -785,15 +845,18 @@ home side&rsquo;s margin contribution: positive favours Georgia.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#2774ae"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/26.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UCLA</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#2774ae"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/26.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UCLA</div><div class="side-conf">Big Ten</div></div><div class="side-score">12</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Ohio State</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/194.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
+<div class="side side--home"><div class="side-score">41</div><div class="side-id"><div class="side-name">Ohio State</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/194.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+28.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+33.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.0</span>
+<span class="gn-sub">mkt 46.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-4.2</span></div>
 </div>
@@ -809,15 +872,18 @@ home side&rsquo;s margin contribution: positive favours Ohio State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#001e44"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/213.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Penn State</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#001e44"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/213.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Penn State</div><div class="side-conf">Big Ten</div></div><div class="side-score">31</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Michigan State</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/127.png" alt="" loading="lazy"><span class="side-accent" style="background:#173f35"></span></div>
+<div class="side side--home"><div class="side-score">20</div><div class="side-id"><div class="side-name">Michigan State</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/127.png" alt="" loading="lazy"><span class="side-accent" style="background:#173f35"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-10.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-6.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">51.3</span>
+<span class="gn-sub">mkt 49.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-3.9</span></div>
 </div>
@@ -833,15 +899,18 @@ home side&rsquo;s margin contribution: positive favours Michigan State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#cc0000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/152.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">NC State</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#cc0000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/152.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">NC State</div><div class="side-conf">ACC</div></div><div class="side-score">19</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Miami</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2390.png" alt="" loading="lazy"><span class="side-accent" style="background:#f47321"></span></div>
+<div class="side side--home"><div class="side-score">32</div><div class="side-id"><div class="side-name">Miami</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2390.png" alt="" loading="lazy"><span class="side-accent" style="background:#f47321"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+12.4</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+16.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">51.2</span>
+<span class="gn-sub">mkt 54.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-3.8</span></div>
 </div>
@@ -857,15 +926,18 @@ home side&rsquo;s margin contribution: positive favours Miami.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#7a0019"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/135.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Minnesota</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#7a0019"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/135.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Minnesota</div><div class="side-conf">Big Ten</div></div><div class="side-score">12</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Oregon</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2483.png" alt="" loading="lazy"><span class="side-accent" style="background:#007030"></span></div>
+<div class="side side--home"><div class="side-score">35</div><div class="side-id"><div class="side-name">Oregon</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2483.png" alt="" loading="lazy"><span class="side-accent" style="background:#007030"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+22.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+26.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">46.6</span>
+<span class="gn-sub">mkt 46.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-3.8</span></div>
 </div>
@@ -881,15 +953,18 @@ home side&rsquo;s margin contribution: positive favours Oregon.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0f2439"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/328.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Utah State</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0f2439"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/328.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Utah State</div><div class="side-conf">Mountain West</div></div><div class="side-score">29</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">UNLV</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2439.png" alt="" loading="lazy"><span class="side-accent" style="background:#cf0a2c"></span></div>
+<div class="side side--home"><div class="side-score">30</div><div class="side-id"><div class="side-name">UNLV</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2439.png" alt="" loading="lazy"><span class="side-accent" style="background:#cf0a2c"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+1.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+4.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">58.2</span>
+<span class="gn-sub">mkt 68.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-3.7</span></div>
 </div>
@@ -905,15 +980,18 @@ home side&rsquo;s margin contribution: positive favours UNLV.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#ce1126"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/120.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Maryland</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#ce1126"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/120.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Maryland</div><div class="side-conf">Big Ten</div></div><div class="side-score">19</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Illinois</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/356.png" alt="" loading="lazy"><span class="side-accent" style="background:#ff5f05"></span></div>
+<div class="side side--home"><div class="side-score">32</div><div class="side-id"><div class="side-name">Illinois</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/356.png" alt="" loading="lazy"><span class="side-accent" style="background:#ff5f05"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+12.5</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+16.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">50.9</span>
+<span class="gn-sub">mkt 51.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-3.6</span></div>
 </div>
@@ -929,15 +1007,18 @@ home side&rsquo;s margin contribution: positive favours Illinois.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#5d1725"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/344.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Mississippi State</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#5d1725"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/344.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Mississippi State</div><div class="side-conf">SEC</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Missouri</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/142.png" alt="" loading="lazy"><span class="side-accent" style="background:#f1b82d"></span></div>
+<div class="side side--home"><div class="side-score">32</div><div class="side-id"><div class="side-name">Missouri</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/142.png" alt="" loading="lazy"><span class="side-accent" style="background:#f1b82d"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+10.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+7.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">54.1</span>
+<span class="gn-sub">mkt 50.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+3.5</span></div>
 </div>
@@ -953,15 +1034,18 @@ home side&rsquo;s margin contribution: positive favours Missouri.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#024230"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/195.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Ohio</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#024230"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/195.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Ohio</div><div class="side-conf">Mid-American</div></div><div class="side-score">21</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-12</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Western Michigan</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2711.png" alt="" loading="lazy"><span class="side-accent" style="background:#532e1f"></span></div>
+<div class="side side--home"><div class="side-score">26</div><div class="side-id"><div class="side-name">Western Michigan</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2711.png" alt="" loading="lazy"><span class="side-accent" style="background:#532e1f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+4.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+1.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">47.5</span>
+<span class="gn-sub">mkt 47.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+3.4</span></div>
 </div>
@@ -977,15 +1061,18 @@ home side&rsquo;s margin contribution: positive favours Western Michigan.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#861f41"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/259.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Virginia Tech</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#861f41"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/259.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Virginia Tech</div><div class="side-conf">ACC</div></div><div class="side-score">21</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Florida State</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/52.png" alt="" loading="lazy"><span class="side-accent" style="background:#782f40"></span></div>
+<div class="side side--home"><div class="side-score">38</div><div class="side-id"><div class="side-name">Florida State</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/52.png" alt="" loading="lazy"><span class="side-accent" style="background:#782f40"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+17.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+14.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">59.0</span>
+<span class="gn-sub">mkt 54.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+3.3</span></div>
 </div>
@@ -1001,15 +1088,18 @@ home side&rsquo;s margin contribution: positive favours Florida State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#a00000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/275.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Wisconsin</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#a00000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/275.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Wisconsin</div><div class="side-conf">Big Ten</div></div><div class="side-score">9</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Indiana</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/84.png" alt="" loading="lazy"><span class="side-accent" style="background:#990000"></span></div>
+<div class="side side--home"><div class="side-score">40</div><div class="side-id"><div class="side-name">Indiana</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/84.png" alt="" loading="lazy"><span class="side-accent" style="background:#990000"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+31.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+28.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">49.5</span>
+<span class="gn-sub">mkt 43.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+3.3</span></div>
 </div>
@@ -1025,15 +1115,18 @@ home side&rsquo;s margin contribution: positive favours Indiana.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#f56600"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/228.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Clemson</div><div class="side-conf">ACC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#f56600"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/228.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Clemson</div><div class="side-conf">ACC</div></div><div class="side-score">23</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Louisville</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/97.png" alt="" loading="lazy"><span class="side-accent" style="background:#c9001f"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Louisville</div><div class="side-conf">ACC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/97.png" alt="" loading="lazy"><span class="side-accent" style="background:#c9001f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+5.1</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+1.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">52.1</span>
+<span class="gn-sub">mkt 50.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+3.2</span></div>
 </div>
@@ -1049,15 +1142,18 @@ home side&rsquo;s margin contribution: positive favours Louisville.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#512888"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2306.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kansas State</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#512888"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2306.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kansas State</div><div class="side-conf">Big 12</div></div><div class="side-score">35</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Oklahoma State</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/197.png" alt="" loading="lazy"><span class="side-accent" style="background:#fe5c00"></span></div>
+<div class="side side--home"><div class="side-score">19</div><div class="side-id"><div class="side-name">Oklahoma State</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/197.png" alt="" loading="lazy"><span class="side-accent" style="background:#fe5c00"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-16.6</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-19.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.7</span>
+<span class="gn-sub">mkt 50.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+2.9</span></div>
 </div>
@@ -1073,15 +1169,18 @@ home side&rsquo;s margin contribution: positive favours Oklahoma State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0033a0"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/68.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Boise State</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0033a0"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/68.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Boise State</div><div class="side-conf">Mountain West</div></div><div class="side-score">20</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">San Diego State</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/21.png" alt="" loading="lazy"><span class="side-accent" style="background:#a6192e"></span></div>
+<div class="side side--home"><div class="side-score">25</div><div class="side-id"><div class="side-name">San Diego State</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/21.png" alt="" loading="lazy"><span class="side-accent" style="background:#a6192e"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+4.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+2.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">45.0</span>
+<span class="gn-sub">mkt 42.2</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+2.9</span></div>
 </div>
@@ -1097,15 +1196,18 @@ home side&rsquo;s margin contribution: positive favours San Diego State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00b140"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/276.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Marshall</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00b140"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/276.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Marshall</div><div class="side-conf">Sun Belt</div></div><div class="side-score">30</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Georgia State</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2247.png" alt="" loading="lazy"><span class="side-accent" style="background:#0039a6"></span></div>
+<div class="side side--home"><div class="side-score">24</div><div class="side-id"><div class="side-name">Georgia State</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2247.png" alt="" loading="lazy"><span class="side-accent" style="background:#0039a6"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-6.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-9.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.8</span>
+<span class="gn-sub">mkt 59.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+2.8</span></div>
 </div>
@@ -1121,15 +1223,18 @@ home side&rsquo;s margin contribution: positive favours Georgia State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#006f71"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/324.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Coastal Carolina</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#006f71"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/324.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Coastal Carolina</div><div class="side-conf">Sun Belt</div></div><div class="side-score">27</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Georgia Southern</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/290.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">Georgia Southern</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/290.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+0.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+3.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">54.6</span>
+<span class="gn-sub">mkt 59.2</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-2.5</span></div>
 </div>
@@ -1145,15 +1250,18 @@ home side&rsquo;s margin contribution: positive favours Georgia Southern.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#003087"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2348.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Louisiana Tech</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#003087"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2348.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Louisiana Tech</div><div class="side-conf">Conference USA</div></div><div class="side-score">20</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Washington State</div><div class="side-conf">Pac-12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/265.png" alt="" loading="lazy"><span class="side-accent" style="background:#a60f2d"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">Washington State</div><div class="side-conf">Pac-12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/265.png" alt="" loading="lazy"><span class="side-accent" style="background:#a60f2d"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+7.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+10.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">47.9</span>
+<span class="gn-sub">mkt 43.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-2.4</span></div>
 </div>
@@ -1169,15 +1277,18 @@ home side&rsquo;s margin contribution: positive favours Washington State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00274c"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/130.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Michigan</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00274c"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/130.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Michigan</div><div class="side-conf">Big Ten</div></div><div class="side-score">29</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div><div class="game-when">neutral site</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Northwestern</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/77.png" alt="" loading="lazy"><span class="side-accent" style="background:#582c83"></span></div>
+<div class="side side--home"><div class="side-score">21</div><div class="side-id"><div class="side-name">Northwestern</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/77.png" alt="" loading="lazy"><span class="side-accent" style="background:#582c83"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-7.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-10.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">50.3</span>
+<span class="gn-sub">mkt 42.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+2.4</span></div>
 </div>
@@ -1193,15 +1304,18 @@ home side&rsquo;s margin contribution: positive favours Northwestern.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0055a2"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/23.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">San José State</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0055a2"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/23.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">San José State</div><div class="side-conf">Mountain West</div></div><div class="side-score">32</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Nevada</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2440.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
+<div class="side side--home"><div class="side-score">20</div><div class="side-id"><div class="side-name">Nevada</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2440.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-12.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-9.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">51.9</span>
+<span class="gn-sub">mkt 49.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-2.3</span></div>
 </div>
@@ -1217,15 +1331,18 @@ home side&rsquo;s margin contribution: positive favours Nevada.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0a254e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2335.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Liberty</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0a254e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2335.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Liberty</div><div class="side-conf">Conference USA</div></div><div class="side-score">27</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Florida International</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2229.png" alt="" loading="lazy"><span class="side-accent" style="background:#091f3f"></span></div>
+<div class="side side--home"><div class="side-score">26</div><div class="side-id"><div class="side-name">Florida International</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2229.png" alt="" loading="lazy"><span class="side-accent" style="background:#091f3f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-1.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-3.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">52.5</span>
+<span class="gn-sub">mkt 52.2</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.9</span></div>
 </div>
@@ -1241,15 +1358,18 @@ home side&rsquo;s margin contribution: positive favours Florida International.</
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00498f"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/235.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Memphis</div><div class="side-conf">American Athletic</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00498f"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/235.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Memphis</div><div class="side-conf">American Athletic</div></div><div class="side-score">26</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">East Carolina</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/151.png" alt="" loading="lazy"><span class="side-accent" style="background:#592a8a"></span></div>
+<div class="side side--home"><div class="side-score">31</div><div class="side-id"><div class="side-name">East Carolina</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/151.png" alt="" loading="lazy"><span class="side-accent" style="background:#592a8a"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+4.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+2.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.5</span>
+<span class="gn-sub">mkt 57.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.9</span></div>
 </div>
@@ -1265,15 +1385,18 @@ home side&rsquo;s margin contribution: positive favours East Carolina.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#003594"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2005.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Air Force</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#003594"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2005.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Air Force</div><div class="side-conf">Mountain West</div></div><div class="side-score">31</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">UConn</div><div class="side-conf">FBS Independents</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/41.png" alt="" loading="lazy"><span class="side-accent" style="background:#000e2f"></span></div>
+<div class="side side--home"><div class="side-score">37</div><div class="side-id"><div class="side-name">UConn</div><div class="side-conf">FBS Independents</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/41.png" alt="" loading="lazy"><span class="side-accent" style="background:#000e2f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+5.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+7.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">67.4</span>
+<span class="gn-sub">mkt 64.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.7</span></div>
 </div>
@@ -1289,15 +1412,18 @@ home side&rsquo;s margin contribution: positive favours UConn.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#006747"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/58.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Florida</div><div class="side-conf">American Athletic</div></div></div>
+<div class="side"><span class="side-accent" style="background:#006747"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/58.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Florida</div><div class="side-conf">American Athletic</div></div><div class="side-score">34</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Navy</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2426.png" alt="" loading="lazy"><span class="side-accent" style="background:#00225b"></span></div>
+<div class="side side--home"><div class="side-score">23</div><div class="side-id"><div class="side-name">Navy</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2426.png" alt="" loading="lazy"><span class="side-accent" style="background:#00225b"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-10.5</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-8.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.7</span>
+<span class="gn-sub">mkt 62.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.7</span></div>
 </div>
@@ -1313,15 +1439,18 @@ home side&rsquo;s margin contribution: positive favours Navy.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0c2340"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2636.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UTSA</div><div class="side-conf">American Athletic</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0c2340"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2636.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UTSA</div><div class="side-conf">American Athletic</div></div><div class="side-score">36</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Charlotte</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2429.png" alt="" loading="lazy"><span class="side-accent" style="background:#005035"></span></div>
+<div class="side side--home"><div class="side-score">20</div><div class="side-id"><div class="side-name">Charlotte</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2429.png" alt="" loading="lazy"><span class="side-accent" style="background:#005035"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-15.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-17.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">55.7</span>
+<span class="gn-sub">mkt 57.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.7</span></div>
 </div>
@@ -1337,15 +1466,18 @@ home side&rsquo;s margin contribution: positive favours Charlotte.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#a32136"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/8.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Arkansas</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#a32136"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/8.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Arkansas</div><div class="side-conf">SEC</div></div><div class="side-score">26</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">LSU</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/99.png" alt="" loading="lazy"><span class="side-accent" style="background:#461d7c"></span></div>
+<div class="side side--home"><div class="side-score">32</div><div class="side-id"><div class="side-name">LSU</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/99.png" alt="" loading="lazy"><span class="side-accent" style="background:#461d7c"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+5.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+4.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">58.6</span>
+<span class="gn-sub">mkt 58.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.7</span></div>
 </div>
@@ -1361,15 +1493,18 @@ home side&rsquo;s margin contribution: positive favours LSU.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2294.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Iowa</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2294.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Iowa</div><div class="side-conf">Big Ten</div></div><div class="side-score">24</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">USC</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/30.png" alt="" loading="lazy"><span class="side-accent" style="background:#990000"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">USC</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/30.png" alt="" loading="lazy"><span class="side-accent" style="background:#990000"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+4.9</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+6.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">52.1</span>
+<span class="gn-sub">mkt 48.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.6</span></div>
 </div>
@@ -1385,15 +1520,18 @@ home side&rsquo;s margin contribution: positive favours USC.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#ff8200"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2638.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UTEP</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#ff8200"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2638.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UTEP</div><div class="side-conf">Conference USA</div></div><div class="side-score">24</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Missouri State</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2623.png" alt="" loading="lazy"><span class="side-accent" style="background:#5e0009"></span></div>
+<div class="side side--home"><div class="side-score">29</div><div class="side-id"><div class="side-name">Missouri State</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2623.png" alt="" loading="lazy"><span class="side-accent" style="background:#5e0009"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+5.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+6.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">52.5</span>
+<span class="gn-sub">mkt 48.2</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.5</span></div>
 </div>
@@ -1409,15 +1547,18 @@ home side&rsquo;s margin contribution: positive favours Missouri State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#0021a5"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/57.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Florida</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#0021a5"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/57.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Florida</div><div class="side-conf">SEC</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Ole Miss</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/145.png" alt="" loading="lazy"><span class="side-accent" style="background:#13294b"></span></div>
+<div class="side side--home"><div class="side-score">31</div><div class="side-id"><div class="side-name">Ole Miss</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/145.png" alt="" loading="lazy"><span class="side-accent" style="background:#13294b"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+9.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+10.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.2</span>
+<span class="gn-sub">mkt 53.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.5</span></div>
 </div>
@@ -1433,15 +1574,18 @@ home side&rsquo;s margin contribution: positive favours Ole Miss.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2026.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">App State</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2026.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">App State</div><div class="side-conf">Sun Belt</div></div><div class="side-score">16</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">James Madison</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/256.png" alt="" loading="lazy"><span class="side-accent" style="background:#450084"></span></div>
+<div class="side side--home"><div class="side-score">38</div><div class="side-id"><div class="side-name">James Madison</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/256.png" alt="" loading="lazy"><span class="side-accent" style="background:#450084"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+22.1</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+20.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.8</span>
+<span class="gn-sub">mkt 53.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.5</span></div>
 </div>
@@ -1457,15 +1601,18 @@ home side&rsquo;s margin contribution: positive favours James Madison.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#002664"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2309.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kent State</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#002664"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2309.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kent State</div><div class="side-conf">Mid-American</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-12</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Akron</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2006.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">Akron</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2006.png" alt="" loading="lazy"><span class="side-accent" style="background:#041e42"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+6.2</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+7.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">49.9</span>
+<span class="gn-sub">mkt 49.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-1.3</span></div>
 </div>
@@ -1481,15 +1628,18 @@ home side&rsquo;s margin contribution: positive favours Akron.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#046a38"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2199.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Eastern Michigan</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#046a38"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2199.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Eastern Michigan</div><div class="side-conf">Mid-American</div></div><div class="side-score">29</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Ball State</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2050.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">Ball State</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2050.png" alt="" loading="lazy"><span class="side-accent" style="background:#ba0c2f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-1.4</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-2.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">57.1</span>
+<span class="gn-sub">mkt 48.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.3</span></div>
 </div>
@@ -1505,15 +1655,18 @@ home side&rsquo;s margin contribution: positive favours Ball State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#c8102e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2459.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Northern Illinois</div><div class="side-conf">Mid-American</div></div></div>
+<div class="side"><span class="side-accent" style="background:#c8102e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2459.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Northern Illinois</div><div class="side-conf">Mid-American</div></div><div class="side-score">27</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-13</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Massachusetts</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/113.png" alt="" loading="lazy"><span class="side-accent" style="background:#881c1c"></span></div>
+<div class="side side--home"><div class="side-score">19</div><div class="side-id"><div class="side-name">Massachusetts</div><div class="side-conf">Mid-American</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/113.png" alt="" loading="lazy"><span class="side-accent" style="background:#881c1c"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-8.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-9.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">46.7</span>
+<span class="gn-sub">mkt 43.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+1.2</span></div>
 </div>
@@ -1529,15 +1682,18 @@ home side&rsquo;s margin contribution: positive favours Massachusetts.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#73000a"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2579.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Carolina</div><div class="side-conf">SEC</div></div></div>
+<div class="side"><span class="side-accent" style="background:#73000a"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2579.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Carolina</div><div class="side-conf">SEC</div></div><div class="side-score">15</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Texas A&amp;M</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/245.png" alt="" loading="lazy"><span class="side-accent" style="background:#500000"></span></div>
+<div class="side side--home"><div class="side-score">33</div><div class="side-id"><div class="side-name">Texas A&amp;M</div><div class="side-conf">SEC</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/245.png" alt="" loading="lazy"><span class="side-accent" style="background:#500000"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+17.4</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+16.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">48.2</span>
+<span class="gn-sub">mkt 49.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.9</span></div>
 </div>
@@ -1553,15 +1709,18 @@ home side&rsquo;s margin contribution: positive favours Texas A&amp;M.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#ceb888"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2509.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Purdue</div><div class="side-conf">Big Ten</div></div></div>
+<div class="side"><span class="side-accent" style="background:#ceb888"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2509.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Purdue</div><div class="side-conf">Big Ten</div></div><div class="side-score">20</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Washington</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/264.png" alt="" loading="lazy"><span class="side-accent" style="background:#33006f"></span></div>
+<div class="side side--home"><div class="side-score">34</div><div class="side-id"><div class="side-name">Washington</div><div class="side-conf">Big Ten</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/264.png" alt="" loading="lazy"><span class="side-accent" style="background:#33006f"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+14.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+14.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">53.7</span>
+<span class="gn-sub">mkt 51.3</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-0.8</span></div>
 </div>
@@ -1577,15 +1736,18 @@ home side&rsquo;s margin contribution: positive favours Washington.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00205b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/6.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Alabama</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00205b"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/6.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">South Alabama</div><div class="side-conf">Sun Belt</div></div><div class="side-score">30</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">UL Monroe</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2433.png" alt="" loading="lazy"><span class="side-accent" style="background:#840029"></span></div>
+<div class="side side--home"><div class="side-score">27</div><div class="side-id"><div class="side-name">UL Monroe</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2433.png" alt="" loading="lazy"><span class="side-accent" style="background:#840029"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-3.3</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-4.0</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">56.4</span>
+<span class="gn-sub">mkt 49.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.7</span></div>
 </div>
@@ -1601,15 +1763,18 @@ home side&rsquo;s margin contribution: positive favours UL Monroe.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#fdbb30"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/338.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kennesaw State</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#fdbb30"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/338.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Kennesaw State</div><div class="side-conf">Conference USA</div></div><div class="side-score">30</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Jacksonville State</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/55.png" alt="" loading="lazy"><span class="side-accent" style="background:#cc0000"></span></div>
+<div class="side side--home"><div class="side-score">28</div><div class="side-id"><div class="side-name">Jacksonville State</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/55.png" alt="" loading="lazy"><span class="side-accent" style="background:#cc0000"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-3.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-3.7</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">58.0</span>
+<span class="gn-sub">mkt 56.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.7</span></div>
 </div>
@@ -1625,15 +1790,18 @@ home side&rsquo;s margin contribution: positive favours Jacksonville State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#492f24"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2751.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Wyoming</div><div class="side-conf">Mountain West</div></div></div>
+<div class="side"><span class="side-accent" style="background:#492f24"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2751.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Wyoming</div><div class="side-conf">Mountain West</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-16</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Fresno State</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/278.png" alt="" loading="lazy"><span class="side-accent" style="background:#c41230"></span></div>
+<div class="side side--home"><div class="side-score">24</div><div class="side-id"><div class="side-name">Fresno State</div><div class="side-conf">Mountain West</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/278.png" alt="" loading="lazy"><span class="side-accent" style="background:#c41230"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+2.2</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+2.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">45.7</span>
+<span class="gn-sub">mkt 40.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-0.6</span></div>
 </div>
@@ -1649,15 +1817,18 @@ home side&rsquo;s margin contribution: positive favours Fresno State.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2116.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UCF</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#000000"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2116.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">UCF</div><div class="side-conf">Big 12</div></div><div class="side-score">10</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Texas Tech</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2641.png" alt="" loading="lazy"><span class="side-accent" style="background:#c30020"></span></div>
+<div class="side side--home"><div class="side-score">34</div><div class="side-id"><div class="side-name">Texas Tech</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2641.png" alt="" loading="lazy"><span class="side-accent" style="background:#c30020"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+23.8</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+24.3</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">43.9</span>
+<span class="gn-sub">mkt 48.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-0.5</span></div>
 </div>
@@ -1673,15 +1844,18 @@ home side&rsquo;s margin contribution: positive favours Texas Tech.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#00853e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/249.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">North Texas</div><div class="side-conf">American Athletic</div></div></div>
+<div class="side"><span class="side-accent" style="background:#00853e"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/249.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">North Texas</div><div class="side-conf">American Athletic</div></div><div class="side-score">39</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">UAB</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/5.png" alt="" loading="lazy"><span class="side-accent" style="background:#1a5632"></span></div>
+<div class="side side--home"><div class="side-score">22</div><div class="side-id"><div class="side-name">UAB</div><div class="side-conf">American Athletic</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/5.png" alt="" loading="lazy"><span class="side-accent" style="background:#1a5632"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">-17.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">-17.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">61.4</span>
+<span class="gn-sub">mkt 69.0</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.5</span></div>
 </div>
@@ -1697,15 +1871,18 @@ home side&rsquo;s margin contribution: positive favours UAB.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#036eb7"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2393.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Middle Tennessee</div><div class="side-conf">Conference USA</div></div></div>
+<div class="side"><span class="side-accent" style="background:#036eb7"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2393.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Middle Tennessee</div><div class="side-conf">Conference USA</div></div><div class="side-score">22</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Western Kentucky</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/98.png" alt="" loading="lazy"><span class="side-accent" style="background:#c60c30"></span></div>
+<div class="side side--home"><div class="side-score">35</div><div class="side-id"><div class="side-name">Western Kentucky</div><div class="side-conf">Conference USA</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/98.png" alt="" loading="lazy"><span class="side-accent" style="background:#c60c30"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+13.7</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+13.5</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">57.0</span>
+<span class="gn-sub">mkt 51.8</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.2</span></div>
 </div>
@@ -1721,15 +1898,18 @@ home side&rsquo;s margin contribution: positive favours Western Kentucky.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#501214"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/326.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Texas State</div><div class="side-conf">Sun Belt</div></div></div>
+<div class="side"><span class="side-accent" style="background:#501214"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/326.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">Texas State</div><div class="side-conf">Sun Belt</div></div><div class="side-score">28</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Southern Miss</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2572.png" alt="" loading="lazy"><span class="side-accent" style="background:#ffc72c"></span></div>
+<div class="side side--home"><div class="side-score">31</div><div class="side-id"><div class="side-name">Southern Miss</div><div class="side-conf">Sun Belt</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/2572.png" alt="" loading="lazy"><span class="side-accent" style="background:#ffc72c"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+3.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+3.2</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">58.5</span>
+<span class="gn-sub">mkt 65.7</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-neg">-0.2</span></div>
 </div>
@@ -1745,15 +1925,18 @@ home side&rsquo;s margin contribution: positive favours Southern Miss.</p>
 <span class="foot-note">published margin = market at lam 0</span></div>
 </article><article class="game">
 <div class="game-top">
-<div class="side"><span class="side-accent" style="background:#eaaa00"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/277.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">West Virginia</div><div class="side-conf">Big 12</div></div></div>
+<div class="side"><span class="side-accent" style="background:#eaaa00"></span><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/277.png" alt="" loading="lazy"><div class="side-id"><div class="side-name">West Virginia</div><div class="side-conf">Big 12</div></div><div class="side-score">21</div></div>
 <div class="game-mid"><span class="game-at">AT</span><div class="game-when">2025-11-15</div></div>
-<div class="side side--home"><div class="side-id"><div class="side-name">Arizona State</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/9.png" alt="" loading="lazy"><span class="side-accent" style="background:#ffc627"></span></div>
+<div class="side side--home"><div class="side-score">31</div><div class="side-id"><div class="side-name">Arizona State</div><div class="side-conf">Big 12</div></div><img class="side-logo" src="https://cdn.collegefootballdata.com/logos/500/9.png" alt="" loading="lazy"><span class="side-accent" style="background:#ffc627"></span></div>
 </div>
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v">+10.0</span></div>
 <div class="gn"><span class="gn-l">Market</span>
 <span class="gn-v">+9.8</span></div>
+<div class="gn"><span class="gn-l">Total</span>
+<span class="gn-v">51.3</span>
+<span class="gn-sub">mkt 46.5</span></div>
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v gn-v--edge-pos">+0.2</span></div>
 </div>
@@ -1815,6 +1998,19 @@ overlap. Adjusting is worth 0.30 points of MAE overall and 0.70 in weeks 5–7.<
 worthless. Opponent-adjusted it fits at 0.153. The feature was never weak — the
 measurement was confounded.</p></div>
 
+<div class="mth-card"><div class="mth-h">Totals &amp; projected scores</div>
+<p>Margin asks who is better, so it uses feature <em>differences</em>. A total asks how
+much scoring the two teams generate together, so it uses <em>sums</em> plus pace —
+drives and plays per game. CFB tempo varies far more than the NFL&rsquo;s.</p>
+<table class="mth-tbl">
+<tr><td>League-mean total</td><td>13.6544</td></tr>
+<tr><td>Model total</td><td>13.0446</td></tr>
+<tr><td>Market total</td><td>12.5055</td></tr>
+<tr><td>Total residual SD</td><td>16.36</td></tr></table>
+<p>Scores are algebra on the two projections: home = (total + margin) / 2. They inherit
+the error of <em>both</em> models, so read a scoreline as a centre of mass, not a
+prediction. A total marked <b>*</b> is the league mean, not a modelled figure.</p></div>
+
 <div class="mth-card"><div class="mth-h">Point-in-time</div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
 <code>endWeek</code> is a real filter, so a backtest cannot see its own answer.</p></div>
@@ -1831,7 +2027,7 @@ week 5 on. Treat the market as the better estimate early.</p></div>
 <p><b>Analysis infrastructure, not betting advice.</b> The model does not beat the closing
 market and its authority is RESEARCH_ONLY; nothing here is a recommendation to wager.</p>
 <p>If gambling stops being fun, call 1-800-GAMBLER.</p>
-<p>Chase Analytics model lab · generated 2026-08-26 19:09 UTC</p>
+<p>Chase Analytics model lab · generated 2026-08-26 19:50 UTC</p>
 </div></footer>
 </body>
 </html>

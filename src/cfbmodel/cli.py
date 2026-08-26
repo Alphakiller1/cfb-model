@@ -63,6 +63,7 @@ def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
     if not rows:
         return {}
     adjusted = efficiency.adjust_all(rows)
+    pace = efficiency.pace_means(rows)
     teams: set[str] = set()
     for off, dfn in adjusted.values():
         teams |= set(off) | set(dfn)
@@ -73,21 +74,39 @@ def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
             off, dfn = adjusted[stat]
             values[f"off_{stat}"] = off.get(team)
             values[f"def_{stat}"] = dfn.get(team)
+        for stat in efficiency.PACE_STATS:
+            values[stat] = (pace.get(team) or {}).get(stat)
         out[team] = matrix.TeamForm(**values)
     return out
 
 
+def _consensus(lines: list[dict], field: str) -> float | None:
+    values = [l[field] for l in lines if l.get(field) is not None]
+    if not values:
+        return None
+    consensus = next((l[field] for l in lines
+                      if l.get("provider") == "consensus" and l.get(field) is not None), None)
+    return float(consensus if consensus is not None else statistics.fmean(values))
+
+
 def _market(season: int, week: int) -> dict[tuple[str, str], float]:
+    """Expected HOME margin per matchup."""
     out: dict[tuple[str, str], float] = {}
     for row in cfbd.lines(season, week=week):
-        vals = [l["spread"] for l in (row.get("lines") or []) if l.get("spread") is not None]
-        if not vals:
+        spread = _consensus(row.get("lines") or [], "spread")
+        if spread is None:
             continue
-        consensus = next((l["spread"] for l in row["lines"]
-                          if l.get("provider") == "consensus" and l.get("spread") is not None), None)
-        spread = float(consensus if consensus is not None else statistics.fmean(vals))
         # CFBD quotes the spread from the home perspective; negate for expected margin.
         out[(row["homeTeam"], row["awayTeam"])] = -spread
+    return out
+
+
+def _market_totals(season: int, week: int) -> dict[tuple[str, str], float]:
+    out: dict[tuple[str, str], float] = {}
+    for row in cfbd.lines(season, week=week):
+        total = _consensus(row.get("lines") or [], "overUnder")
+        if total is not None:
+            out[(row["homeTeam"], row["awayTeam"])] = total
     return out
 
 
@@ -101,6 +120,7 @@ def cmd_board(args: argparse.Namespace) -> int:
     r = build_ratings(args.season, args.week)
     forms = _forms(args.season, args.week)
     market = _market(args.season, args.week)
+    market_tot = _market_totals(args.season, args.week)
     slate = [g for g in cfbd.games(args.season, week=args.week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
     if not slate:
@@ -115,6 +135,7 @@ def cmd_board(args: argparse.Namespace) -> int:
             neutral=bool(g.get("neutralSite")),
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
+            market_total=market_tot.get((home, away)),
             authority=auth,
             week=args.week,
         )
@@ -128,17 +149,30 @@ def cmd_board(args: argparse.Namespace) -> int:
         print("      week 5 on. Treat the market as the better estimate here.")
         print()
     rows.sort(key=lambda f: abs(f.edge_points) if f.edge_points is not None else -1, reverse=True)
-    print(f"  {'matchup':<44} {'model':>7} {'market':>7} {'edge':>7} {'win%':>6}  action")
-    print(f"  {'-'*44} {'-'*7} {'-'*7} {'-'*7} {'-'*6}  ------")
+    print(f"  {'matchup':<40} {'score':>13} {'total':>12} {'model':>7} {'market':>7} {'edge':>7}  action")
+    print(f"  {'-'*40} {'-'*13} {'-'*12} {'-'*7} {'-'*7} {'-'*7}  ------")
     for f in rows:
         matchup = f"{f.away} @ {f.home}" + ("  (N)" if f.neutral else "")
         model = f"{f.model_margin:+.1f}" if f.model_margin is not None else "  --"
         mkt = f"{f.market_margin:+.1f}" if f.market_margin is not None else "  --"
         edge = f"{f.edge_points:+.1f}" if f.edge_points is not None else "  --"
-        win = f"{100*f.win_probability:.0f}%" if f.win_probability is not None else " --"
+        if f.projected_home_score is not None:
+            score = f"{f.projected_away_score:.0f}-{f.projected_home_score:.0f}"
+            star = "" if f.total_modelled else "*"
+            score = f"{score}{star}"
+        else:
+            score = "--"
+        if f.projected_total is not None:
+            tot = f"{f.projected_total:.1f}"
+            if f.market_total is not None:
+                tot = f"{tot}/{f.market_total:.1f}"
+        else:
+            tot = "--"
         flag = "" if f.used_efficiency else "  [ratings-only]"
-        print(f"  {matchup[:44]:<44} {model:>7} {mkt:>7} {edge:>7} {win:>6}  {f.action.value}{flag}")
-    print(f"\n  {len(rows)} games · model margins are the home side · "
+        print(f"  {matchup[:40]:<40} {score:>13} {tot:>12} {model:>7} {mkt:>7} {edge:>7}  {f.action.value}{flag}")
+    print(f"\n  {len(rows)} games · score is the MODEL projection (away-home), "
+          f"total column is model/market")
+    print(f"  * = league-mean total, no form yet · "
           f"published margin equals the market at lam=0\n")
     return 0
 

@@ -75,3 +75,30 @@ def adjust_all(rows: list[dict], *, stats: tuple[str, ...] = ADJUSTABLE_STATS
                ) -> dict[str, tuple[dict[str, float], dict[str, float]]]:
     """Adjust every stat, returning {stat: (offense, defense)}."""
     return {stat: adjust(rows, stat) for stat in stats}
+
+
+# Pace feeds the totals model, not the margin model. It is deliberately NOT
+# opponent-adjusted: how many drives a team gets is mostly a property of how it
+# and its opponent play, and adjusting it would double-count the opponent term
+# the totals model already carries as a sum.
+PACE_STATS = ("drives", "plays")
+
+
+def pace_means(rows: list[dict], *, stats: tuple[str, ...] = PACE_STATS
+               ) -> dict[str, dict[str, float]]:
+    """Per-team mean offensive drives and plays per game."""
+    acc: dict[str, dict[str, list[float]]] = {}
+    for row in rows:
+        team = row.get("team")
+        offense = row.get("offense") or {}
+        if not team:
+            continue
+        bucket = acc.setdefault(team, {s: [] for s in stats})
+        for stat in stats:
+            value = offense.get(stat)
+            if value is not None:
+                bucket[stat].append(float(value))
+    return {
+        team: {s: (statistics.fmean(v) if v else None) for s, v in d.items()}
+        for team, d in acc.items()
+    }

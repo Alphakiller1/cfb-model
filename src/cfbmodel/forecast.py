@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cfbmodel import matrix, ratings
+from cfbmodel import matrix, ratings, totals
 from cfbmodel.authority import Action, Authority, current
 
 # Fraction of model-vs-market disagreement retained. See module docstring.
@@ -64,10 +64,22 @@ class Forecast:
     authority: Authority
     in_validated_regime: bool = True
     used_efficiency: bool = False
+    projected_total: float | None = None
+    projected_home_score: float | None = None
+    projected_away_score: float | None = None
+    total_modelled: bool = False
+    market_total: float | None = None
 
     @property
     def has_price(self) -> bool:
         return self.market_margin is not None
+
+    @property
+    def total_edge(self) -> float | None:
+        """Model total minus market total, or None without both."""
+        if self.projected_total is None or self.market_total is None:
+            return None
+        return self.projected_total - self.market_total
 
 
 def _model_margin(
@@ -96,6 +108,7 @@ def game(
     lam: float = DEFAULT_LAM,
     authority: Authority | None = None,
     week: int | None = None,
+    market_total: float | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -115,6 +128,12 @@ def game(
         published = market_margin if edge is None else market_margin + lam * edge
 
     win_p = None if published is None else ratings.win_probability(published)
+    # The scoreline is the MODEL's projection: model margin + model total. It is
+    # deliberately not built from the published margin, which at lam = 0 is just
+    # the market -- a "projected score" that silently restated the market's
+    # number would be the market's projection wearing the model's label. The
+    # board shows the market columns alongside it, so the two stay comparable.
+    projection = totals.project(model_margin, home_form, away_form)
     return Forecast(
         home=home, away=away, neutral=neutral,
         model_margin=model_margin, market_margin=market_margin,
@@ -124,4 +143,9 @@ def game(
         authority=auth,
         in_validated_regime=in_regime,
         used_efficiency=used_efficiency,
+        projected_total=projection.total,
+        projected_home_score=projection.home_score,
+        projected_away_score=projection.away_score,
+        total_modelled=projection.modelled,
+        market_total=market_total,
     )

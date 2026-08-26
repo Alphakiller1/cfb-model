@@ -85,3 +85,43 @@ def test_the_two_regimes_are_not_the_same_number():
                    home_form=_full_form(), away_form=_full_form())
     bare = fc.game(home="A", away="B", team_ratings=RATINGS)
     assert full.model_margin != pytest.approx(bare.model_margin)
+
+
+def _paced_form():
+    return matrix.TeamForm(
+        off_ppa=0.20, off_successRate=0.46, off_explosiveness=1.20, off_stuffRate=0.17,
+        def_ppa=0.12, def_successRate=0.42, def_explosiveness=1.18, def_stuffRate=0.19,
+        drives=12.0, plays=68.0)
+
+
+def test_forecast_carries_a_projected_scoreline():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form())
+    assert f.projected_total is not None
+    assert f.projected_home_score is not None
+    assert f.total_modelled is True
+
+
+def test_scoreline_reflects_the_model_margin_not_the_published_one():
+    """At lam = 0 the published margin is the market. A 'projected score' built
+    from it would be the market's projection wearing the model's label."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(),
+                market_margin=1.0)
+    assert f.margin == pytest.approx(1.0)          # published = market
+    spread = f.projected_home_score - f.projected_away_score
+    assert spread == pytest.approx(f.model_margin)  # scoreline follows the model
+    assert spread != pytest.approx(1.0)
+
+
+def test_total_edge_is_model_minus_market():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(),
+                market_total=50.0)
+    assert f.total_edge == pytest.approx(f.projected_total - 50.0)
+
+
+def test_total_edge_is_none_without_a_market_total():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form())
+    assert f.total_edge is None
