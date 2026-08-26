@@ -141,6 +141,9 @@ details.bd>summary:hover{color:var(--text);background:rgba(124,77,255,.06)}
 padding:6px 0;border-bottom:1px solid var(--border-soft);font-size:12.5px}
 .bd-row:last-child{border-bottom:0}
 .bd-row--total{border-top:1px solid var(--border-2);margin-top:4px;padding-top:9px;font-weight:700}
+.bd-sec{color:var(--v-light);font-family:var(--display);font-weight:700;font-size:10.5px;
+letter-spacing:.14em;text-transform:uppercase;padding:11px 0 5px;border-bottom:1px solid var(--border-soft)}
+.bd-sec:first-child{padding-top:2px}
 .bd-k{color:var(--text-2)}
 .bd-a,.bd-h{color:var(--text-2);font-variant-numeric:tabular-nums;min-width:66px;text-align:right}
 .bd-c{font-variant-numeric:tabular-nums;min-width:64px;text-align:right;font-weight:700}

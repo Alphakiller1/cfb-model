@@ -153,82 +153,169 @@ def _side(season: int, school: str, home: bool, score: float | None = None) -> s
     return f'<div class="side{" side--home" if home else ""}">{body}</div>'
 
 
-def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float]) -> str:
+def _bd_row(label: str, away, home, points, *, kind: str = "") -> str:
+    """One symmetric breakdown row: same quantity for both teams, then its effect.
+
+    `away`/`home` are the raw inputs so the two columns are directly comparable;
+    `points` is what the pair is worth to the home margin. Passing None leaves a
+    cell blank rather than printing a zero that looks measured.
+    """
+    def cell(v):
+        if v is None:
+            return ""
+        return f"{v:,.2f}" if abs(v) >= 100 else f"{v:.3f}" if abs(v) < 1 else f"{v:.2f}"
+
+    if points is None:
+        pts, cls = "", ""
+    else:
+        pts = f"{points:+.2f}"
+        cls = "bd-c--pos" if points > 0 else ("bd-c--neg" if points < 0 else "")
+    return (f'<div class="bd-row {kind}"><span class="bd-k">{esc(label)}</span>'
+            f'<span class="bd-a">{cell(away)}</span><span class="bd-h">{cell(home)}</span>'
+            f'<span class="bd-c {cls}">{pts}</span></div>')
+
+
+def _bd_section(title: str) -> str:
+    return f'<div class="bd-sec">{esc(title)}</div>'
+
+
+def _bd_shell(row: Row, season: int, body: str, footnote: str) -> str:
+    f = row.forecast
+    return f"""<details class="bd"><summary>Breakdown · how the model got there</summary>
+<div class="bd-body">
+<div class="bd-head-row"><span>Factor</span><span>{esc(teams.get(season, f.away).short)}</span>
+<span>{esc(teams.get(season, f.home).short)}</span><span>Pts</span></div>
+{body}
+<p class="foot-note" style="margin-top:10px">{footnote}</p>
+</div></details>"""
+
+
+def _projection_rows(row: Row, season: int) -> str:
+    """Closing section shared by both regimes: margin, total, and the scoreline."""
+    f = row.forecast
+    out = [_bd_section("Projection")]
+    if f.model_margin is not None:
+        out.append(_bd_row("Model margin", None, None, f.model_margin, kind="bd-row--total"))
+    if f.projected_total is not None:
+        label = "Projected total" + ("" if f.total_modelled else " (league mean)")
+        out.append(
+            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
+            f'<span class="bd-a"></span><span class="bd-h"></span>'
+            f'<span class="bd-c">{f.projected_total:.1f}</span></div>')
+    if f.market_total is not None:
+        out.append(
+            f'<div class="bd-row"><span class="bd-k">Market total</span>'
+            f'<span class="bd-a"></span><span class="bd-h"></span>'
+            f'<span class="bd-c">{f.market_total:.1f}</span></div>')
+    if f.projected_home_score is not None:
+        out.append(
+            f'<div class="bd-row bd-row--total"><span class="bd-k">Projected score</span>'
+            f'<span class="bd-a">{f.projected_away_score:.0f}</span>'
+            f'<span class="bd-h">{f.projected_home_score:.0f}</span>'
+            f'<span class="bd-c"></span></div>')
+    return "".join(out)
+
+
+def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float],
+                       comps: dict | None) -> str:
     """Breakdown for the ratings-only regime (weeks 1-4, or a team without form).
 
-    There is no efficiency form to decompose here, so showing nothing would leave
-    the early-season board without the one thing that makes a number arguable.
-    What *is* decomposable is the rating projection itself, so that is shown.
+    There is no efficiency form to decompose, so this decomposes the thing that
+    *did* produce the number: the preseason rating itself, term by term, for both
+    teams side by side. The earlier version listed "home power rating" and "away
+    power rating" as separate one-sided rows, which was neither symmetric nor
+    informative about where those ratings came from.
     """
     f = row.forecast
     home_r = rating_table.get(f.home)
     away_r = rating_table.get(f.away)
     if home_r is None or away_r is None:
         return ""
+
+    parts: list[str] = []
+    hc = (comps or {}).get(f.home)
+    ac = (comps or {}).get(f.away)
+    unavailable: list[str] = []
+    if hc and ac:
+        # The model intercept is identical for both teams and cancels out of the
+        # margin, so it is not shown -- a permanent "+0.00" row is noise.
+        parts.append(_bd_section("Preseason rating inputs"))
+        for (label, a_raw, a_pts), (_, h_raw, h_pts) in zip(ac.rows(), hc.rows()):
+            # A term whose input is identically zero for both teams is not a
+            # measurement of parity -- it is a feed that has not published yet.
+            if a_raw == 0.0 and h_raw == 0.0:
+                unavailable.append(label)
+                parts.append(_bd_row(f"{label} (not published yet)", None, None, None))
+                continue
+            parts.append(_bd_row(label, a_raw, h_raw, h_pts - a_pts))
+
+    parts.append(_bd_section("Power rating"))
+    parts.append(_bd_row("Rating", away_r, home_r, home_r - away_r, kind="bd-row--total"))
+
+    parts.append(_bd_section("Game context"))
     home_field = 0.0 if f.neutral else ratings.HOME_FIELD_POINTS
-    parts = [
-        ("Home power rating", None, home_r, home_r),
-        ("Away power rating", away_r, None, -away_r),
-        ("Home field" if not f.neutral else "Home field (neutral site)", None, None, home_field),
-        ("Calibration", None, None, fc.RATING_BIAS_CORRECTION),
-    ]
-    lines = []
-    for label, av, hv, contribution in parts:
-        cls = "bd-c--pos" if contribution > 0 else ("bd-c--neg" if contribution < 0 else "")
-        a_txt = f"{av:.2f}" if av is not None else ""
-        h_txt = f"{hv:.2f}" if hv is not None else ""
-        lines.append(
-            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
-            f'<span class="bd-a">{a_txt}</span><span class="bd-h">{h_txt}</span>'
-            f'<span class="bd-c {cls}">{contribution:+.2f}</span></div>')
-    total = f.model_margin if f.model_margin is not None else 0.0
-    lines.append(
-        f'<div class="bd-row bd-row--total"><span class="bd-k">Model margin</span>'
-        f'<span class="bd-a"></span><span class="bd-h"></span>'
-        f'<span class="bd-c">{total:+.2f}</span></div>')
-    return f"""<details class="bd"><summary>Breakdown · how the model got there</summary>
-<div class="bd-body">
-<div class="bd-head-row"><span>Factor</span><span>{esc(teams.get(season, f.away).short)}</span>
-<span>{esc(teams.get(season, f.home).short)}</span><span>Pts</span></div>
-{"".join(lines)}
-<p class="foot-note" style="margin-top:10px">No opponent-adjusted form exists yet this
-season, so this is the preseason rating projection — prior seasons, recruiting talent,
-returning production and recruiting class, blended with results as they arrive.</p>
-</div></details>"""
+    parts.append(_bd_row("Home field" if not f.neutral else "Neutral site",
+                         None, None, home_field))
+    parts.append(_bd_row("Calibration", None, None, fc.RATING_BIAS_CORRECTION))
+    parts.append(_projection_rows(row, season))
+
+    note = ("No opponent-adjusted form exists yet this season, so the rating above is the "
+            "preseason projection and the <b>Pts</b> column is each input&rsquo;s effect on "
+            "the home margin.")
+    if unavailable:
+        note += (" " + esc(", ".join(unavailable)) +
+                 " has not been published for this season, so it contributes nothing —"
+                 " that is a missing feed, not a measured tie.")
+    return _bd_shell(row, season, "".join(parts), note)
 
 
-def _breakdown(row: Row, season: int, rating_table: dict[str, float]) -> str:
+def _breakdown(row: Row, season: int, rating_table: dict[str, float],
+               comps: dict | None = None) -> str:
+    """Full-regime breakdown: every opponent-adjusted feature, then the roll-up."""
     f = row.forecast
     if not (row.home_form and row.away_form and row.home_form.complete()
             and row.away_form.complete()):
-        return _ratings_breakdown(row, season, rating_table)
+        return _ratings_breakdown(row, season, rating_table, comps)
+
     c = matrix.COEFFICIENTS
-    lines = []
-    for key in _ORDER:
-        hv = getattr(row.home_form, key)
-        av = getattr(row.away_form, key)
-        contribution = c[key] * (hv - av)
-        cls = "bd-c--pos" if contribution > 0 else ("bd-c--neg" if contribution < 0 else "")
-        lines.append(
-            f'<div class="bd-row"><span class="bd-k">{esc(_FEATURE_LABELS[key])}</span>'
-            f'<span class="bd-a">{av:.3f}</span><span class="bd-h">{hv:.3f}</span>'
-            f'<span class="bd-c {cls}">{contribution:+.2f}</span></div>')
+    parts: list[str] = []
+    for group, keys in (("Offense", _ORDER[:4]), ("Defense", _ORDER[4:])):
+        parts.append(_bd_section(group))
+        for key in keys:
+            hv = getattr(row.home_form, key)
+            av = getattr(row.away_form, key)
+            parts.append(_bd_row(_FEATURE_LABELS[key], av, hv, c[key] * (hv - av)))
     efficiency = matrix.margin_points(row.home_form, row.away_form) or 0.0
-    lines.append(
-        f'<div class="bd-row bd-row--total"><span class="bd-k">Efficiency edge</span>'
-        f'<span class="bd-a"></span><span class="bd-h"></span>'
-        f'<span class="bd-c">{efficiency:+.2f}</span></div>')
-    return f"""<details class="bd"><summary>Breakdown · how the model got there</summary>
-<div class="bd-body">
-<div class="bd-head-row"><span>Factor</span><span>{esc(teams.get(season, f.away).short)}</span>
-<span>{esc(teams.get(season, f.home).short)}</span><span>Pts</span></div>
-{"".join(lines)}
-<p class="foot-note" style="margin-top:10px">Values are opponent-adjusted. Points are the
-home side&rsquo;s margin contribution: positive favours {esc(f.home)}.</p>
-</div></details>"""
+    parts.append(_bd_row("Efficiency edge", None, None, efficiency, kind="bd-row--total"))
+
+    parts.append(_bd_section("Power rating & context"))
+    home_r = rating_table.get(f.home)
+    away_r = rating_table.get(f.away)
+    if home_r is not None and away_r is not None:
+        gap = home_r - away_r
+        home_field = 0.0 if f.neutral else ratings.HOME_FIELD_POINTS
+        # Rating and home field are INPUTS to the contribution below, not separate
+        # addends -- the coefficient is applied to their sum. Giving them their own
+        # Pts values made the column stop reconciling with the model margin.
+        parts.append(_bd_row("Rating", away_r, home_r, None))
+        parts.append(_bd_row("Home field" if not f.neutral else "Neutral site (no home field)",
+                             None, home_field if not f.neutral else None, None))
+        # The rating term is down-weighted because opponent-adjusted efficiency
+        # now carries much of what the ratings alone used to.
+        parts.append(_bd_row(f"Rating + home field, x{c['rating_margin']:.2f}",
+                             None, None, c["rating_margin"] * (gap + home_field)))
+    parts.append(_bd_row("Intercept", None, None, c["intercept"]))
+    parts.append(_projection_rows(row, season))
+
+    note = ("Values are opponent-adjusted, so they are comparable across schedules. "
+            "<b>Pts</b> is each factor&rsquo;s effect on the home margin: positive favours "
+            f"{esc(f.home)}. Allowed statistics are inverted, so a lower number is a "
+            "better defence.")
+    return _bd_shell(row, season, "".join(parts), note)
 
 
-def _game_card(row: Row, season: int, rating_table: dict[str, float]) -> str:
+def _game_card(row: Row, season: int, rating_table: dict[str, float],
+               comps: dict | None = None) -> str:
     f = row.forecast
     edge_cls = ""
     if f.edge_points is not None:
@@ -269,7 +356,7 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float]) -> str:
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v {edge_cls}">{_fmt(f.edge_points)}</span></div>
 </div>
-{_breakdown(row, season, rating_table)}
+{_breakdown(row, season, rating_table, comps)}
 <div class="game-foot"><span class="badge {badge}">{esc(f.action.value)}</span>
 <span class="foot-note">{esc(note)}</span></div>
 </article>"""
@@ -360,7 +447,7 @@ week 5 on. Treat the market as the better estimate early.</p></div>
 
 # ── page ─────────────────────────────────────────────────────────────────────
 def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, float],
-           authority: auth_mod.Authority) -> str:
+           authority: auth_mod.Authority, comps: dict | None = None) -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     in_regime = week >= fc.FIRST_VALIDATED_WEEK
     regime_pill = ('<span class="pill pill-ok">validated regime</span>' if in_regime
@@ -372,7 +459,7 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
         "13.79 against a market of 12.00 — a 1.8-point gap, versus 0.37 from week 5 on."
         "</div>" % week)
 
-    cards = "".join(_game_card(r, season, rating_table) for r in rows) or (
+    cards = "".join(_game_card(r, season, rating_table, comps) for r in rows) or (
         '<p class="dim">No FBS-vs-FBS games found for this week.</p>')
 
     return f"""<!doctype html>
@@ -446,6 +533,15 @@ def build(*, season: int, week: int, out: Path) -> Path:
 
     authority = auth_mod.current()
     rating_table = cli.build_ratings(season, week)
+    # Preseason component detail, so an early-season breakdown can show what the
+    # rating was actually built from rather than only asserting it.
+    try:
+        p1 = ratings.build(cli._to_games(cli.cfbd.games(cli._prior_season(season), completed_only=True)))
+        p2 = ratings.build(cli._to_games(cli.cfbd.games(cli._prior_season(cli._prior_season(season)),
+                                                        completed_only=True)))
+        comps = preseason.components(season, p1, p2)
+    except Exception:
+        comps = None
     forms = cli._forms(season, week)
     market = cli._market(season, week)
     market_total = cli._market_totals(season, week)
@@ -469,7 +565,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     rows.sort(key=lambda r: abs(r.forecast.edge_points) if r.forecast.edge_points is not None else -1,
               reverse=True)
     html_text = render(season=season, week=week, rows=rows,
-                       rating_table=rating_table, authority=authority)
+                       rating_table=rating_table, authority=authority, comps=comps)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
     return out

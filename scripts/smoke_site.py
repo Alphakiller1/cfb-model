@@ -32,6 +32,28 @@ BRAND = ("#08090F", "#9A6BFF", "DM Sans", "Roboto Condensed", "chase-wordmark")
 FORBIDDEN = ("may_bet = true", ">BET<")
 
 
+def _grab(block: str, label: str) -> float | None:
+    m = re.search(re.escape(label) + r"[^<]*</span>.*?class=\"bd-c[^\"]*\">([+-]?[\d.]+)</span>",
+                  block, re.S)
+    return float(m.group(1)) if m else None
+
+
+def _breakdown_mismatches(html: str, tolerance: float = 0.03) -> int:
+    """Count breakdowns whose components do not reconcile to the model margin."""
+    bad = 0
+    for block in re.findall(r'<details class="bd">.*?</details>', html, re.S):
+        margin = _grab(block, "Model margin")
+        if margin is None:
+            continue
+        efficiency = _grab(block, "Efficiency edge")
+        if efficiency is None:
+            continue      # preseason regime; its rows are inputs, not addends
+        total = efficiency + (_grab(block, "Rating + home field") or 0.0) + (_grab(block, "Intercept") or 0.0)
+        if abs(total - margin) > tolerance:
+            bad += 1
+    return bad
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: smoke_site.py <path>")
@@ -61,6 +83,14 @@ def main() -> int:
     # Every game should offer a breakdown once form exists; in-regime weeks must
     # not ship a board where none do.
     breakdowns = html.count('<details class="bd">')
+
+    # A breakdown whose Pts column does not sum to the model margin is worse than
+    # no breakdown -- it looks like an audit trail while being wrong. This caught a
+    # real double-count: home field was listed with its own points while already
+    # being inside the rating contribution.
+    mismatches = _breakdown_mismatches(html)
+    if mismatches:
+        failures.append(f"{mismatches} breakdown(s) do not sum to the model margin")
 
     # Logos are the most fragile external dependency; catch a wholesale failure.
     logos = len(re.findall(r'class="side-logo"[^>]*src=', html))

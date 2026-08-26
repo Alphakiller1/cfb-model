@@ -39,6 +39,7 @@ its out-of-regime warning.
 from __future__ import annotations
 
 import statistics
+from dataclasses import dataclass
 
 from cfbmodel.sources import cfbd
 
@@ -92,31 +93,86 @@ def _recruiting(season: int) -> dict[str, float]:
     return {r["team"]: float(r["points"]) for r in rows if r.get("points") is not None}
 
 
-def build(
+@dataclass(frozen=True)
+class Components:
+    """What went into one team's preseason rating.
+
+    `raw` is the published input (a talent composite, a returning-production
+    share); `points` is what that input contributed to the rating after its
+    coefficient. Keeping both means a breakdown can show the reader the actual
+    recruiting number as well as what it was worth.
+    """
+
+    prior_rating: tuple[float, float]
+    prior_rating_2: tuple[float, float]
+    talent: tuple[float, float]
+    returning_production: tuple[float, float]
+    recruiting_points: tuple[float, float]
+    intercept: float
+    rating: float
+
+    def rows(self) -> list[tuple[str, float, float]]:
+        """(label, raw, points) in the order they should be displayed."""
+        return [
+            ("Prior season rating", *self.prior_rating),
+            ("Two seasons back", *self.prior_rating_2),
+            ("Recruiting talent", *self.talent),
+            ("Returning production", *self.returning_production),
+            ("Recruiting class", *self.recruiting_points),
+        ]
+
+
+def components(
     season: int,
     prior_ratings: dict[str, float],
     prior_ratings_2: dict[str, float] | None = None,
-) -> dict[str, float]:
-    """Preseason rating for every team with a prior-season rating."""
+) -> dict[str, Components]:
+    """Per-team preseason rating with every term kept separate."""
     prior_ratings_2 = prior_ratings_2 or {}
     talent, _ = _centred(_talent(season))
     recruiting, _ = _centred(_recruiting(season))
     returning = _returning(season)
 
     c = COEFFICIENTS
-    out: dict[str, float] = {}
+    out: dict[str, Components] = {}
     for team, r1 in prior_ratings.items():
         if team == "__FCS__":
             continue
-        out[team] = (
-            c["intercept"]
-            + c["prior_rating"] * r1
-            + c["prior_rating_2"] * prior_ratings_2.get(team, 0.0)
-            + c["talent"] * talent.get(team, 0.0)
-            + c["returning_production"] * returning.get(team, DEFAULT_RETURNING)
-            + c["recruiting_points"] * recruiting.get(team, 0.0)
+        r2 = prior_ratings_2.get(team, 0.0)
+        tal = talent.get(team, 0.0)
+        ret = returning.get(team, DEFAULT_RETURNING)
+        rec = recruiting.get(team, 0.0)
+        terms = Components(
+            prior_rating=(r1, c["prior_rating"] * r1),
+            prior_rating_2=(r2, c["prior_rating_2"] * r2),
+            talent=(tal, c["talent"] * tal),
+            returning_production=(ret, c["returning_production"] * ret),
+            recruiting_points=(rec, c["recruiting_points"] * rec),
+            intercept=c["intercept"],
+            rating=0.0,
+        )
+        total = (terms.intercept + terms.prior_rating[1] + terms.prior_rating_2[1]
+                 + terms.talent[1] + terms.returning_production[1]
+                 + terms.recruiting_points[1])
+        out[team] = Components(
+            prior_rating=terms.prior_rating,
+            prior_rating_2=terms.prior_rating_2,
+            talent=terms.talent,
+            returning_production=terms.returning_production,
+            recruiting_points=terms.recruiting_points,
+            intercept=terms.intercept,
+            rating=total,
         )
     return out
+
+
+def build(
+    season: int,
+    prior_ratings: dict[str, float],
+    prior_ratings_2: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Preseason rating for every team with a prior-season rating."""
+    return {t: c.rating for t, c in components(season, prior_ratings, prior_ratings_2).items()}
 
 
 def blend(preseason: dict[str, float], in_season: dict[str, float], week: int) -> dict[str, float]:
