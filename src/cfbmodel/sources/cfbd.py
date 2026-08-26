@@ -1,0 +1,176 @@
+"""collegefootballdata.com client.
+
+Two things this module exists to enforce.
+
+**Point-in-time.** CFBD's season endpoints accept `endWeek`, and it is a real
+filter, not a hint: Ohio State's 2025 offensive PPA reads 0.381 over 297 plays
+through week 6 and 0.327 over 886 plays for the full season. Asking for season
+totals while forecasting week 6 would hand the model the answer. Every function
+here that returns team form therefore *requires* the week you are forecasting and
+queries strictly before it.
+
+**Caching.** A completed week never changes, so it is cached to disk forever. The
+current week is volatile and is never cached. That distinction is the whole cache
+policy; getting it backwards either burns quota or serves stale form.
+
+No third-party dependencies -- stdlib only, so this package stays importable
+anywhere without a build step.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+BASE = "https://api.collegefootballdata.com"
+CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "cache"
+TIMEOUT = 60
+RETRIES = 3
+
+
+class CFBDError(RuntimeError):
+    pass
+
+
+class MissingKey(CFBDError):
+    """No API key configured."""
+
+
+def _load_env_key() -> str | None:
+    """Read CFBD_API_KEY from the environment, falling back to a local .env."""
+    key = os.getenv("CFBD_API_KEY")
+    if key:
+        return key.strip()
+    env = Path(__file__).resolve().parents[3] / ".env"
+    if env.is_file():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("CFBD_API_KEY="):
+                return line.split("=", 1)[1].strip()
+    return None
+
+
+def _cache_path(path: str) -> Path:
+    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:20]
+    return CACHE_DIR / f"{digest}.json"
+
+
+def get(path: str, *, cacheable: bool = True) -> list | dict:
+    """GET a CFBD path. `cacheable=False` for anything covering the live week."""
+    if cacheable:
+        hit = _cache_path(path)
+        if hit.is_file():
+            try:
+                return json.loads(hit.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                hit.unlink(missing_ok=True)  # corrupt entry: refetch
+
+    key = _load_env_key()
+    if not key:
+        raise MissingKey(
+            "CFBD_API_KEY is not set. Get a free key at https://collegefootballdata.com/key "
+            "and put it in .env (see .env.example)."
+        )
+    req = urllib.request.Request(
+        BASE + path,
+        headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+    )
+    last: Exception | None = None
+    for attempt in range(RETRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                data = json.load(resp)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise CFBDError(f"CFBD rejected the key ({exc.code}). Check CFBD_API_KEY.") from exc
+            last = exc
+        except Exception as exc:  # noqa: BLE001 - network flakiness is retried
+            last = exc
+        time.sleep(1.5 * (attempt + 1))
+    else:
+        raise CFBDError(f"CFBD request failed after {RETRIES} attempts: {path} ({last})")
+
+    if cacheable:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_path(path).write_text(json.dumps(data), encoding="utf-8")
+    return data
+
+
+# ── Games ────────────────────────────────────────────────────────────────────
+def games(season: int, *, season_type: str = "regular", week: int | None = None,
+          completed_only: bool = False) -> list[dict]:
+    """Games for a season. Includes FCS opponents; filter with `fbs_only`."""
+    path = f"/games?year={season}&seasonType={season_type}"
+    if week is not None:
+        path += f"&week={week}"
+    # A season still in progress must not be cached, or the tail freezes.
+    rows = get(path, cacheable=_season_is_closed(season))
+    if completed_only:
+        rows = [g for g in rows if g.get("completed")]
+    return rows
+
+
+def _season_is_closed(season: int) -> bool:
+    """A season is safe to cache once it is comfortably in the past."""
+    return season < _current_season()
+
+
+def _current_season() -> int:
+    now = time.gmtime()
+    # A CFB season is labelled by the calendar year it starts in; it runs into January.
+    return now.tm_year if now.tm_mon >= 7 else now.tm_year - 1
+
+
+def fbs_teams(season: int) -> list[dict]:
+    return get(f"/teams/fbs?year={season}")
+
+
+# ── Point-in-time team form ──────────────────────────────────────────────────
+def advanced_season_stats(season: int, *, through_week: int) -> list[dict]:
+    """Advanced team stats using ONLY games before `through_week`.
+
+    `through_week` is the week being forecast, so the query ends at the week
+    before it. Weeks are 1-indexed; forecasting week 1 has no prior form and
+    returns an empty list rather than silently leaking the season.
+    """
+    if through_week <= 1:
+        return []
+    return get(f"/stats/season/advanced?year={season}&endWeek={through_week - 1}")
+
+
+def ppa_teams(season: int, *, through_week: int) -> list[dict]:
+    if through_week <= 1:
+        return []
+    return get(f"/ppa/teams?year={season}&endWeek={through_week - 1}")
+
+
+# ── Season-level priors (legitimately known before kickoff) ──────────────────
+def talent(season: int) -> list[dict]:
+    """Recruiting talent composite. Known before the season starts."""
+    return get(f"/talent?year={season}")
+
+
+def returning_production(season: int) -> list[dict]:
+    """Returning production. Known before the season starts."""
+    return get(f"/player/returning?year={season}")
+
+
+# ── Market ───────────────────────────────────────────────────────────────────
+def lines(season: int, *, week: int | None = None, season_type: str = "regular") -> list[dict]:
+    path = f"/lines?year={season}&seasonType={season_type}"
+    if week is not None:
+        path += f"&week={week}"
+    return get(path, cacheable=_season_is_closed(season))
+
+
+# ── Benchmarks ───────────────────────────────────────────────────────────────
+def sp_ratings(season: int) -> list[dict]:
+    """SP+ (Bill Connelly). A strong public benchmark to measure against."""
+    return get(f"/ratings/sp?year={season}")
