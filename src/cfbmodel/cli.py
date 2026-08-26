@@ -10,7 +10,7 @@ import argparse
 import statistics
 
 from cfbmodel import forecast as fc
-from cfbmodel import matrix, ratings
+from cfbmodel import efficiency, matrix, ratings
 from cfbmodel.authority import current
 from cfbmodel.sources import cfbd
 
@@ -56,20 +56,26 @@ def build_ratings(season: int, week: int) -> dict[str, float]:
 
 
 def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
-    rows = cfbd.advanced_season_stats(season, through_week=week)
+    """Opponent-adjusted efficiency for every team, using games before `week`.
+
+    Raw season stats are confounded by schedule strength; adjusting is worth 0.30
+    points of MAE overall and 0.70 in weeks 5-7. See efficiency.py.
+    """
+    rows = cfbd.season_game_stats(season, through_week=week)
+    if not rows:
+        return {}
+    adjusted = efficiency.adjust_all(rows)
+    teams: set[str] = set()
+    for off, dfn in adjusted.values():
+        teams |= set(off) | set(dfn)
     out: dict[str, matrix.TeamForm] = {}
-    for r in rows:
-        o, d = r.get("offense") or {}, r.get("defense") or {}
-        havoc = (d.get("havoc") or {}).get("total")
-        out[r["team"]] = matrix.TeamForm(
-            success_rate=o.get("successRate"), ppa_per_play=o.get("ppa"),
-            points_per_opportunity=o.get("pointsPerOpportunity"),
-            explosiveness=o.get("explosiveness"),
-            success_rate_allowed=d.get("successRate"),
-            points_per_opportunity_allowed=d.get("pointsPerOpportunity"),
-            ppa_allowed=d.get("ppa"), explosiveness_allowed=d.get("explosiveness"),
-            havoc_rate=havoc,
-        )
+    for team in teams:
+        values = {}
+        for stat in efficiency.ADJUSTABLE_STATS:
+            off, dfn = adjusted[stat]
+            values[f"off_{stat}"] = off.get(team)
+            values[f"def_{stat}"] = dfn.get(team)
+        out[team] = matrix.TeamForm(**values)
     return out
 
 
@@ -131,7 +137,8 @@ def cmd_board(args: argparse.Namespace) -> int:
         mkt = f"{f.market_margin:+.1f}" if f.market_margin is not None else "  --"
         edge = f"{f.edge_points:+.1f}" if f.edge_points is not None else "  --"
         win = f"{100*f.win_probability:.0f}%" if f.win_probability is not None else " --"
-        print(f"  {matchup[:44]:<44} {model:>7} {mkt:>7} {edge:>7} {win:>6}  {f.action.value}")
+        flag = "" if f.used_efficiency else "  [ratings-only]"
+        print(f"  {matchup[:44]:<44} {model:>7} {mkt:>7} {edge:>7} {win:>6}  {f.action.value}{flag}")
     print(f"\n  {len(rows)} games · model margins are the home side · "
           f"published margin equals the market at lam=0\n")
     return 0

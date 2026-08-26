@@ -1,18 +1,27 @@
-"""Game forecast: ratings + efficiency matrix, anchored to the market.
+"""Game forecast: opponent-adjusted efficiency over power ratings, anchored to
+the market.
 
-The anchor weight `lam` is the fraction of the *model's* disagreement with the
-closing line that is kept. It defaults to 0.0, and that default is a measurement,
-not modesty: across 3,256 out-of-sample games the model's MAE is 12.7883 against
-the closing market's 12.1596, and the ATS record on disagreements is 49.32%
-(95% CI [47.59%, 51.04%], breakeven 52.38%). Keeping any of the disagreement made
-the forecast worse, so the honest anchored answer is the price itself.
+Two prediction regimes, because they were validated separately and mixing them
+would be a fit applied outside where it was measured:
 
-`lam` is exposed rather than hard-coded so the number can be re-estimated when
-more evidence exists -- but raising it is a claim about evidence and belongs with
-a gate record, not a config tweak.
+* **Full** -- both teams have complete opponent-adjusted form. Uses the jointly
+  fitted model: `intercept + rating_margin * base + efficiency`. MAE 12.5251.
+* **Ratings-only fallback** -- either side is missing form (weeks 1-4, or a team
+  with no prior games). The joint coefficients cannot be used here: the rating
+  term carries only 0.4476 because efficiency carries the rest, so applying it
+  alone would shrink every margin toward zero. Falls back to the separately
+  validated ratings path with its own bias correction. MAE 12.9749.
 
-When there is no market (preseason, or an unpriced game) the model view is all
-there is, and `market_anchored` is False so downstream can tell the difference.
+The anchor weight `lam` is the fraction of the model's disagreement with the
+closing line that is kept. It defaults to 0.0, and that default is a measurement:
+across 3,256 out-of-sample games the model's MAE is 12.5251 against the market's
+12.1596, and ATS on disagreements is 51.11% (95% CI [49.39%, 52.84%]) against a
+52.38% breakeven. The model no longer loses *confidently* -- the interval now
+straddles breakeven -- but the point estimate is still short, so the honest
+anchored answer remains the price.
+
+Raising `lam` is a claim about evidence and belongs with a gate record, not a
+config tweak.
 """
 
 from __future__ import annotations
@@ -25,29 +34,19 @@ from cfbmodel.authority import Action, Authority, current
 # Fraction of model-vs-market disagreement retained. See module docstring.
 DEFAULT_LAM = 0.0
 
+# Correction for the ratings-only fallback. `ratings.projected_margin` runs
+# +2.123 points high for the home side; this is measured directly, and the
+# independently fitted intercept of the old single-regime model matched it to
+# three decimals. Only used when efficiency form is unavailable -- the full
+# model has its own jointly fitted intercept.
+RATING_BIAS_CORRECTION = -2.1204
+
 # The backtest covered weeks 5+ of FBS-vs-FBS games. Earlier weeks have no
 # current-season form and lean entirely on discounted carryover ratings, and
-# week-1 slates are full of power-conference-vs-Group-of-5 mismatches that barely
-# occur later. Forecasts outside that regime are reported but flagged: on the
-# 2026 week 1 slate the model read Indiana -14 against a market of -40.8, and it
-# was the market that was right.
+# week-1 slates are full of power-vs-Group-of-5 mismatches that barely occur
+# later. On the 2026 week 1 slate the model read Indiana -12 against a market of
+# -40.8, and the market was right.
 FIRST_VALIDATED_WEEK = 5
-
-# Points of margin per unit of combined efficiency-index edge, fitted by
-# regressing the ratings residual on the index edge over 3,256 games.
-EFFICIENCY_POINTS_PER_INDEX = 0.4842
-
-# Calibration constant applied to EVERY projection, with or without form.
-#
-# It corrects the rating projection itself, not the efficiency features: measured
-# directly, `ratings.projected_margin` runs +2.123 points high for the home side,
-# and the independently fitted intercept came out at -2.1204. Those matching to
-# three decimals is what identifies this as a ratings bias.
-#
-# It used to live inside the efficiency term, which meant it silently switched off
-# whenever form was missing -- exactly weeks 1-4, the regime that was already the
-# weakest. See reports/BASELINE_2019_2025.md.
-RATING_BIAS_CORRECTION = -2.1204
 
 
 @dataclass(frozen=True)
@@ -55,38 +54,34 @@ class Forecast:
     home: str
     away: str
     neutral: bool
-    model_margin: float | None          # model's own view, home perspective
-    market_margin: float | None         # market's expected home margin
-    margin: float | None                # what the model actually publishes
+    model_margin: float | None
+    market_margin: float | None
+    margin: float | None
     win_probability: float | None
-    edge_points: float | None           # model - market, None without a price
+    edge_points: float | None
     market_anchored: bool
     action: Action
     authority: Authority
     in_validated_regime: bool = True
+    used_efficiency: bool = False
 
     @property
     def has_price(self) -> bool:
         return self.market_margin is not None
 
 
-def _efficiency_edge(home: matrix.TeamForm | None, away: matrix.TeamForm | None) -> float:
-    """Points of margin from the efficiency matrix, 0.0 when form is incomplete.
-
-    Collapsing nine features into two weighted indices costs some accuracy
-    against fitting them individually (12.884 vs 12.788 MAE); the indices are
-    kept because they are what a *matrix* means -- interpretable groups whose
-    weights can be read and argued with.
-    """
-    if home is None or away is None:
-        return 0.0
-    parts = []
-    for form, sign in ((home, 1.0), (away, -1.0)):
-        off, dfn = matrix.offense_index(form), matrix.defense_index(form)
-        if off is None or dfn is None:
-            return 0.0     # partial form is no form; never half-credit a team
-        parts.append(sign * (off + dfn))
-    return EFFICIENCY_POINTS_PER_INDEX * sum(parts)
+def _model_margin(
+    base: float,
+    home_form: matrix.TeamForm | None,
+    away_form: matrix.TeamForm | None,
+) -> tuple[float, bool]:
+    """Return (margin, used_efficiency)."""
+    if home_form is not None and away_form is not None:
+        efficiency = matrix.margin_points(home_form, away_form)
+        if efficiency is not None:
+            c = matrix.COEFFICIENTS
+            return c["intercept"] + c["rating_margin"] * base + efficiency, True
+    return base + RATING_BIAS_CORRECTION, False
 
 
 def game(
@@ -102,28 +97,21 @@ def game(
     authority: Authority | None = None,
     week: int | None = None,
 ) -> Forecast:
-    """Forecast one game. `market_margin` is the expected HOME margin.
-
-    Pass `week` so the forecast can say whether it falls inside the regime the
-    model was actually validated on.
-    """
+    """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
     in_regime = True if week is None else week >= FIRST_VALIDATED_WEEK
 
     base = ratings.projected_margin(team_ratings, home, away, neutral=neutral)
-    model_margin = (
-        None if base is None
-        else base + RATING_BIAS_CORRECTION + _efficiency_edge(home_form, away_form)
-    )
+    if base is None:
+        model_margin, used_efficiency = None, False
+    else:
+        model_margin, used_efficiency = _model_margin(base, home_form, away_form)
 
     if market_margin is None:
-        published = model_margin
-        anchored = False
-        edge = None
+        published, anchored, edge = model_margin, False, None
     else:
         anchored = True
         edge = None if model_margin is None else model_margin - market_margin
-        # lam = 0 publishes the market exactly; lam = 1 publishes the model.
         published = market_margin if edge is None else market_margin + lam * edge
 
     win_p = None if published is None else ratings.win_probability(published)
@@ -135,4 +123,5 @@ def game(
         action=auth.action_for(edge, market_margin is not None),
         authority=auth,
         in_validated_regime=in_regime,
+        used_efficiency=used_efficiency,
     )

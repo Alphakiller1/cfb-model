@@ -9,14 +9,20 @@ Ported from `nfl-model`, with CFB's own measured evidence.
 Current state, from `reports/BASELINE_2019_2025.md` -- walk-forward on 3,256
 out-of-sample FBS-vs-FBS games (2019, 2021-2025; 2020 excluded as non-comparable):
 
-    model  MAE 12.9749
-    market MAE 12.1596        model is 0.8154 points WORSE
-    ATS when the model disagrees with the spread: 1595-1635-26 = 49.38%
-    95% CI [47.66%, 51.11%]   breakeven at -110 is 52.38%
+    model  MAE 12.5251
+    market MAE 12.1596        model is 0.3655 points WORSE
+    ATS when the model disagrees with the spread: 1651-1579-26 = 51.11%
+    95% CI [49.39%, 52.84%]   breakeven at -110 is 52.38%
 
-The confidence interval sits entirely below breakeven, so this is not a
-"needs more data" result -- on this sample the disagreement is confidently
-unprofitable. Authority is RESEARCH_ONLY and `may_bet` is False.
+Opponent-adjusting the efficiency features moved this materially: the earlier
+raw-stat model sat at MAE 12.9749 with ATS 49.38% and a 95% CI of
+[47.66%, 51.11%] -- entirely below breakeven, i.e. confidently unprofitable.
+
+**The interval now straddles breakeven.** That is a real change in kind, not
+degree: the model is no longer confidently losing, it is indistinguishable from
+breakeven. It is still not evidence of an edge -- the point estimate is 51.11%
+against a 52.38% bar, and an interval that contains the bar is exactly what
+"unproven" looks like. Authority stays RESEARCH_ONLY and `may_bet` is False.
 
 Deliberately hard to override: `promote()` requires every gate passed in
 explicitly. There is no boolean that flips it on.
@@ -101,8 +107,10 @@ def current() -> Authority:
         unmet_gates=unmet,
         evidence=(
             "reports/BASELINE_2019_2025.md - walk-forward on 3,256 out-of-sample "
-            "FBS games: model MAE 12.9749 vs closing market 12.1596 (0.8154 worse); "
-            "ATS on disagreements 49.38%, 95% CI [47.66%, 51.11%] vs 52.38% breakeven"
+            "FBS games, opponent-adjusted: model MAE 12.5251 vs closing market "
+            "12.1596 (0.3655 worse); ATS on disagreements 51.11%, 95% CI "
+            "[49.39%, 52.84%] - straddles the 52.38% breakeven, so unproven "
+            "rather than confidently losing"
         ),
     )
 

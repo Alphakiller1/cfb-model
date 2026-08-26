@@ -35,12 +35,13 @@ def test_unrated_team_yields_no_model_margin():
     assert f.model_margin is None
 
 
-def test_partial_form_contributes_nothing_rather_than_half():
-    """A team with incomplete form must not be scored as partially good."""
-    half = matrix.TeamForm(success_rate=0.5)
-    full = fc.game(home="A", away="B", team_ratings=RATINGS, home_form=half)
+def test_partial_form_falls_back_to_the_ratings_regime():
+    """Incomplete form must not be half-scored; it falls back to ratings-only."""
+    half = matrix.TeamForm(off_ppa=0.5)
+    partial = fc.game(home="A", away="B", team_ratings=RATINGS, home_form=half)
     bare = fc.game(home="A", away="B", team_ratings=RATINGS)
-    assert full.model_margin == pytest.approx(bare.model_margin)
+    assert partial.model_margin == pytest.approx(bare.model_margin)
+    assert partial.used_efficiency is False
 
 
 def test_early_weeks_are_flagged_out_of_regime():
@@ -61,13 +62,26 @@ def test_bias_correction_applies_without_form():
     assert bare.model_margin == pytest.approx(raw + fc.RATING_BIAS_CORRECTION)
 
 
-def test_bias_correction_also_applies_with_form():
-    full = matrix.TeamForm(
-        success_rate=0.45, ppa_per_play=0.15, points_per_opportunity=4.0,
-        explosiveness=1.1, success_rate_allowed=0.42,
-        points_per_opportunity_allowed=4.2, ppa_allowed=0.10,
-        explosiveness_allowed=1.2, havoc_rate=0.15)
-    f = fc.game(home="A", away="B", team_ratings=RATINGS, home_form=full, away_form=full)
+def _full_form():
+    return matrix.TeamForm(
+        off_ppa=0.15, off_successRate=0.45, off_explosiveness=1.1, off_stuffRate=0.18,
+        def_ppa=0.10, def_successRate=0.42, def_explosiveness=1.2, def_stuffRate=0.20)
+
+
+def test_full_regime_uses_the_jointly_fitted_coefficients():
+    """With complete form the model switches regimes: identical forms cancel,
+    leaving intercept + rating_margin * base rather than the fallback."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_full_form(), away_form=_full_form())
     raw = RATINGS["A"] - RATINGS["B"] + 4.53
-    # Identical forms cancel in the efficiency term, leaving only the correction.
-    assert f.model_margin == pytest.approx(raw + fc.RATING_BIAS_CORRECTION)
+    c = matrix.COEFFICIENTS
+    assert f.used_efficiency is True
+    assert f.model_margin == pytest.approx(c["intercept"] + c["rating_margin"] * raw)
+
+
+def test_the_two_regimes_are_not_the_same_number():
+    """Guards against silently applying the joint fit where it was not measured."""
+    full = fc.game(home="A", away="B", team_ratings=RATINGS,
+                   home_form=_full_form(), away_form=_full_form())
+    bare = fc.game(home="A", away="B", team_ratings=RATINGS)
+    assert full.model_margin != pytest.approx(bare.model_margin)

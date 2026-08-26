@@ -1,69 +1,81 @@
-"""CFB logic matrix -- fitted, not assumed.
+"""CFB logic matrix -- fitted on opponent-adjusted efficiency.
 
-The scaffold this replaces (chase-analytics-brain `core/genesis/sports/cfb.py`)
-carried research priors reasoned from the NFL matrix. Most survived contact with
-data. One did not, and it is worth stating plainly:
+Two things live here, and they are not the same thing:
 
-**Explosiveness was over-weighted on a plausible-sounding argument.** The prior
-reasoned that because CFB defenses vary far more than NFL ones, big plays are
-more repeatable and deserve *more* weight than in the NFL (0.20 vs 0.14). Fitted
-against 3,256 out-of-sample games, offensive explosiveness carries essentially no
-independent weight (0.016) once success rate and PPA are in the model. Success
-rate dominates both sides. Explosiveness is largely already priced by PPA, which
-is points-per-play and therefore rewards the same big gains.
+* `OFFENSE_WEIGHTS` / `DEFENSE_WEIGHTS` -- the **interpretation**. Standardised
+  importances (|coefficient| x feature SD) normalised within each group, so the
+  relative contribution of each family can be read and argued with. This is what
+  a *matrix* is for.
+* `COEFFICIENTS` -- what the model actually **predicts** with. Collapsing the
+  eight features into two weighted indices costs 0.0745 points of MAE (12.5995
+  vs 12.5251) and drops ATS from 51.11% to 50.34%, so the forecast uses the full
+  fit and the weights document it.
 
-Weights are standardised importances -- |coefficient| x feature standard
-deviation -- from a leave-one-season-out linear fit on point-in-time features,
-normalised within each group. They express *relative* contribution, which is what
-a weight group means; the raw regression coefficients live in
-`reports/BASELINE_2019_2025.md`.
+Fitted on 3,256 out-of-sample FBS games (2019, 2021-2025), leave-one-season-out,
+with every feature opponent-adjusted and garbage time excluded. See
+`efficiency.py` for why the adjustment matters and
+`reports/BASELINE_2019_2025.md` for the numbers.
 
-Adding these features to opponent-adjusted ratings is worth 0.187 points of MAE
-(12.975 -> 12.788). That is real but modest, and still 0.63 points short of the
-closing market. See `authority.py`.
+**The explosiveness story, corrected twice.** The original scaffold reasoned that
+weaker, more variable CFB defenses make big plays more repeatable, so
+explosiveness deserved more weight than the NFL's 0.14. Fitted on *raw* season
+stats it scored 0.016 and looked worthless. Fitted on *opponent-adjusted* stats
+it scores 0.153 on offense and 0.189 on defense. The prior was right; the raw
+measurement was confounded by schedule strength. Success rate still dominates.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-LINEAGE_VERSION = "2026.08-fitted"
+LINEAGE_VERSION = "2026.08-opponent-adjusted"
 STATUS = "CHALLENGER/UNPROMOTED"
 SOURCE_LINEAGE = (
-    "chase-analytics-brain/core/genesis/sports/cfb.py",   # the scaffold this corrects
+    "chase-analytics-brain/core/genesis/sports/cfb.py",
     "Alphakiller1/nfl-genesis/src/genesis/logic_matrix.py",
-    "collegefootballdata.com /stats/season/advanced",
+    "collegefootballdata.com /stats/game/advanced (excludeGarbageTime)",
 )
 
-# Fitted. Sums to 1.0.
+# Interpretation. Sums to 1.0.
 OFFENSE_WEIGHTS = {
-    "success_rate": 0.5455,
-    "ppa_per_play": 0.2531,
-    "points_per_opportunity": 0.1853,
-    "explosiveness": 0.0161,
+    "success_rate": 0.5796,
+    "explosiveness": 0.1533,
+    "ppa_per_play": 0.1488,
+    "stuff_rate_inverse": 0.1183,
 }
 
-# Fitted. Sums to 1.0. "_inverse" means the raw stat is better when lower, so it
-# enters the blend negated.
 DEFENSE_WEIGHTS = {
-    "success_rate_allowed_inverse": 0.3994,
-    "points_per_opportunity_allowed_inverse": 0.2705,
-    "ppa_allowed_inverse": 0.1727,
-    "explosiveness_allowed_inverse": 0.1266,
-    "havoc_rate": 0.0308,
+    "success_rate_allowed_inverse": 0.5402,
+    "explosiveness_allowed_inverse": 0.1889,
+    "ppa_allowed_inverse": 0.1451,
+    "stuff_rate": 0.1258,
 }
 
-# NOT fitted -- these remain research priors. CFBD exposes talent and returning
-# production, but they are preseason quantities whose effect is confounded with
-# the opponent-adjusted rating once a few games exist. Marked as unfitted so no
-# one mistakes them for measured values.
+# NOT fitted -- preseason quantities, confounded with the opponent-adjusted
+# rating once games exist. Research priors only.
 TALENT_WEIGHTS = {
     "recruiting_composite_2yr": 0.45,
     "returning_production": 0.30,
     "portal_net_rating": 0.25,
 }
 
-# Measured on 2019, 2021-2025 FBS-vs-FBS games. See ratings.py.
+# Prediction. Points of margin per unit of (home - away) difference in each
+# opponent-adjusted stat. Signs are meaningful: a high offensive stuff rate means
+# being stuffed, and low allowed-stats mean a good defence.
+COEFFICIENTS: dict[str, float] = {
+    "intercept": 0.5920,
+    "rating_margin": 0.4476,
+    "off_ppa": 5.5250,
+    "def_ppa": -6.2664,
+    "off_successRate": 47.1558,
+    "def_successRate": -49.7084,
+    "off_explosiveness": 5.4551,
+    "def_explosiveness": -6.6809,
+    "off_stuffRate": -12.0629,
+    "def_stuffRate": 12.3940,
+}
+
+# Measured. See ratings.py and the baseline report.
 HOME_FIELD_POINTS = 4.53
 BLOWOUT_CAP = 32.0
 RECENCY_HALFLIFE_WEEKS = 12.0
@@ -98,49 +110,34 @@ for _name, _group in GROUPS.items():
 
 @dataclass(frozen=True)
 class TeamForm:
-    """Point-in-time efficiency for one team. All fields optional: early-season
-    teams legitimately have no prior form, and a missing value must not silently
-    become zero."""
+    """Opponent-adjusted efficiency for one team.
 
-    success_rate: float | None = None
-    ppa_per_play: float | None = None
-    points_per_opportunity: float | None = None
-    explosiveness: float | None = None
-    success_rate_allowed: float | None = None
-    points_per_opportunity_allowed: float | None = None
-    ppa_allowed: float | None = None
-    explosiveness_allowed: float | None = None
-    havoc_rate: float | None = None
+    Every field is optional because early-season teams legitimately have no prior
+    form, and a missing value must never silently become zero.
+    """
+
+    off_ppa: float | None = None
+    off_successRate: float | None = None
+    off_explosiveness: float | None = None
+    off_stuffRate: float | None = None
+    def_ppa: float | None = None
+    def_successRate: float | None = None
+    def_explosiveness: float | None = None
+    def_stuffRate: float | None = None
+
+    FIELDS = ("off_ppa", "off_successRate", "off_explosiveness", "off_stuffRate",
+              "def_ppa", "def_successRate", "def_explosiveness", "def_stuffRate")
 
     def complete(self) -> bool:
-        return all(getattr(self, f) is not None for f in (
-            "success_rate", "ppa_per_play", "points_per_opportunity", "explosiveness",
-            "success_rate_allowed", "points_per_opportunity_allowed", "ppa_allowed",
-            "explosiveness_allowed", "havoc_rate"))
+        return all(getattr(self, f) is not None for f in self.FIELDS)
 
 
-def offense_index(form: TeamForm) -> float | None:
-    """Weighted offensive efficiency index, or None when form is incomplete."""
-    values = {
-        "success_rate": form.success_rate,
-        "ppa_per_play": form.ppa_per_play,
-        "points_per_opportunity": form.points_per_opportunity,
-        "explosiveness": form.explosiveness,
-    }
-    if any(v is None for v in values.values()):
+def margin_points(home: TeamForm, away: TeamForm) -> float | None:
+    """Points of margin from the efficiency difference, or None if either side
+    has incomplete form."""
+    if not (home.complete() and away.complete()):
         return None
-    return sum(OFFENSE_WEIGHTS[k] * v for k, v in values.items())
-
-
-def defense_index(form: TeamForm) -> float | None:
-    """Weighted defensive index. Allowed-stats are negated so higher is better."""
-    values = {
-        "success_rate_allowed_inverse": None if form.success_rate_allowed is None else -form.success_rate_allowed,
-        "points_per_opportunity_allowed_inverse": None if form.points_per_opportunity_allowed is None else -form.points_per_opportunity_allowed,
-        "ppa_allowed_inverse": None if form.ppa_allowed is None else -form.ppa_allowed,
-        "explosiveness_allowed_inverse": None if form.explosiveness_allowed is None else -form.explosiveness_allowed,
-        "havoc_rate": form.havoc_rate,
-    }
-    if any(v is None for v in values.values()):
-        return None
-    return sum(DEFENSE_WEIGHTS[k] * v for k, v in values.items())
+    return sum(
+        COEFFICIENTS[f] * (getattr(home, f) - getattr(away, f))
+        for f in TeamForm.FIELDS
+    )

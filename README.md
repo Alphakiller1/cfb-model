@@ -17,13 +17,19 @@ than hiding it. Walk-forward on **3,256 out-of-sample FBS games** (2019, 2021–
 | Candidate | MAE | vs market |
 | --- | ---: | ---: |
 | Closing market | **12.1596** | — |
-| Ratings + efficiency matrix | 12.7883 | +0.6287 |
+| Ratings + opponent-adjusted efficiency | 12.5251 | +0.3655 |
+| Ratings + raw efficiency | 12.7883 | +0.6287 |
 | Ratings only | 12.9749 | +0.8154 |
 
-ATS where the model disagrees with the spread: **1593–1637–26 = 49.32%**,
-95% CI [47.59%, 51.04%], breakeven 52.38%. The interval is entirely below
-breakeven, so `authority.current()` returns `RESEARCH_ONLY` and `may_bet` is
-`False`. Full evidence: [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
+ATS where the model disagrees with the spread: **1651–1579–26 = 51.11%**,
+95% CI **[49.39%, 52.84%]**, breakeven 52.38%.
+
+The interval **straddles** breakeven — before opponent adjustment it sat entirely
+below it. The model is now indistinguishable from breakeven rather than
+confidently losing, which is a change in kind. It is still not evidence of an
+edge: an interval containing the bar is what "unproven" looks like, so
+`authority.current()` returns `RESEARCH_ONLY` and `may_bet` is `False`. Full
+evidence: [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
 ## What is actually different about college football
 
@@ -36,6 +42,9 @@ Three things drive the design, and all three are measured, not assumed:
    4,325 non-neutral FBS-vs-FBS games.
 3. **Margins are far noisier** — SD 24.2 versus the NFL's ~13.5 — so a given
    rating gap implies a much less certain outcome.
+4. **Schedules barely overlap**, so raw efficiency is badly confounded. Adjusting
+   for opponent is worth 0.30 points of MAE overall and 0.70 in weeks 5–7 — and
+   it revived explosiveness as a signal, which raw stats had buried at 0.016.
 
 ## Quick start
 
@@ -53,7 +62,8 @@ python -m cfbmodel.cli board --season 2026 --week 1
 | --- | --- |
 | `sources/cfbd.py` | CFBD client. Enforces point-in-time queries and caches only closed weeks. |
 | `ratings.py` | Opponent-adjusted, blowout-capped power ratings. |
-| `matrix.py` | Fitted efficiency matrix — offense/defense weight groups, validated at import. |
+| `efficiency.py` | Opponent adjustment — solves offense and defense jointly, like the ratings. |
+| `matrix.py` | Fitted matrix. Weight groups are the interpretation; `COEFFICIENTS` is the predictor. |
 | `forecast.py` | Market-anchored game forecast, with a validated-regime flag. |
 | `authority.py` | What a forecast is *allowed* to be used for. |
 
@@ -87,5 +97,5 @@ covered. On the 2026 week 1 slate the model read Indiana −14.1 against a marke
 ## Tests
 
 ```bash
-python -m pytest -q     # 36 passed
+python -m pytest -q     # 51 passed
 ```

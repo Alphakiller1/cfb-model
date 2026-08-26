@@ -46,3 +46,17 @@ def test_implausible_edge_is_review():
     """A 30-point disagreement with a liquid line is a bug signal."""
     assert current().action_for(30.0, True) is Action.REVIEW
     assert current().action_for(-30.0, True) is Action.REVIEW
+
+
+def test_evidence_reports_the_opponent_adjusted_numbers():
+    """The gate must cite what the model does now, not a superseded baseline."""
+    e = current().evidence
+    assert "12.5251" in e
+    assert "opponent-adjusted" in e
+
+
+def test_still_unpromoted_despite_the_ci_straddling_breakeven():
+    """An interval containing the breakeven bar is 'unproven', not 'edge'."""
+    a = current()
+    assert a.may_bet is False
+    assert "ats_lower_confidence_bound_above_breakeven" in a.unmet_gates

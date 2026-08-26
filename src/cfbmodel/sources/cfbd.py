@@ -145,6 +145,40 @@ def advanced_season_stats(season: int, *, through_week: int) -> list[dict]:
     return get(f"/stats/season/advanced?year={season}&endWeek={through_week - 1}")
 
 
+def game_advanced_stats(season: int, *, week: int, exclude_garbage_time: bool = True) -> list[dict]:
+    """Per-game advanced team stats, one row per team per game.
+
+    Carries `opponent`, which is what makes opponent adjustment possible --
+    the season endpoint only gives pooled totals. `excludeGarbageTime` is a real
+    filter (Ohio State: 486 plays -> 411 through week 9).
+
+    Note this endpoint exposes a *different* stat set from the season one:
+    `pointsPerOpportunity` and `havoc` are season-only and absent here.
+    """
+    path = f"/stats/game/advanced?year={season}&week={week}"
+    if exclude_garbage_time:
+        path += "&excludeGarbageTime=true"
+    return get(path, cacheable=_season_is_closed(season) or week < _live_week_guess())
+
+
+def _live_week_guess() -> int:
+    """Rough current week, used only to decide what is safe to cache."""
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    start = _dt.datetime(now.year if now.month >= 7 else now.year - 1, 8, 24, tzinfo=_dt.timezone.utc)
+    return max(1, ((now - start).days // 7) + 1)
+
+
+def season_game_stats(season: int, *, through_week: int,
+                      exclude_garbage_time: bool = True) -> list[dict]:
+    """Every per-game row for `season` strictly BEFORE `through_week`."""
+    out: list[dict] = []
+    for week in range(1, max(1, through_week)):
+        out.extend(game_advanced_stats(season, week=week,
+                                       exclude_garbage_time=exclude_garbage_time))
+    return out
+
+
 def ppa_teams(season: int, *, through_week: int) -> list[dict]:
     if through_week <= 1:
         return []
