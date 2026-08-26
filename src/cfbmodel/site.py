@@ -151,11 +151,55 @@ def _side(season: int, school: str, home: bool) -> str:
     return f'<div class="side{" side--home" if home else ""}">{body}</div>'
 
 
-def _breakdown(row: Row, season: int) -> str:
+def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float]) -> str:
+    """Breakdown for the ratings-only regime (weeks 1-4, or a team without form).
+
+    There is no efficiency form to decompose here, so showing nothing would leave
+    the early-season board without the one thing that makes a number arguable.
+    What *is* decomposable is the rating projection itself, so that is shown.
+    """
+    f = row.forecast
+    home_r = rating_table.get(f.home)
+    away_r = rating_table.get(f.away)
+    if home_r is None or away_r is None:
+        return ""
+    home_field = 0.0 if f.neutral else ratings.HOME_FIELD_POINTS
+    parts = [
+        ("Home power rating", None, home_r, home_r),
+        ("Away power rating", away_r, None, -away_r),
+        ("Home field" if not f.neutral else "Home field (neutral site)", None, None, home_field),
+        ("Calibration", None, None, fc.RATING_BIAS_CORRECTION),
+    ]
+    lines = []
+    for label, av, hv, contribution in parts:
+        cls = "bd-c--pos" if contribution > 0 else ("bd-c--neg" if contribution < 0 else "")
+        a_txt = f"{av:.2f}" if av is not None else ""
+        h_txt = f"{hv:.2f}" if hv is not None else ""
+        lines.append(
+            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
+            f'<span class="bd-a">{a_txt}</span><span class="bd-h">{h_txt}</span>'
+            f'<span class="bd-c {cls}">{contribution:+.2f}</span></div>')
+    total = f.model_margin if f.model_margin is not None else 0.0
+    lines.append(
+        f'<div class="bd-row bd-row--total"><span class="bd-k">Model margin</span>'
+        f'<span class="bd-a"></span><span class="bd-h"></span>'
+        f'<span class="bd-c">{total:+.2f}</span></div>')
+    return f"""<details class="bd"><summary>Breakdown · how the model got there</summary>
+<div class="bd-body">
+<div class="bd-head-row"><span>Factor</span><span>{esc(teams.get(season, f.away).short)}</span>
+<span>{esc(teams.get(season, f.home).short)}</span><span>Pts</span></div>
+{"".join(lines)}
+<p class="foot-note" style="margin-top:10px">No opponent-adjusted form exists yet this
+season, so this is the preseason rating projection — prior seasons, recruiting talent,
+returning production and recruiting class, blended with results as they arrive.</p>
+</div></details>"""
+
+
+def _breakdown(row: Row, season: int, rating_table: dict[str, float]) -> str:
     f = row.forecast
     if not (row.home_form and row.away_form and row.home_form.complete()
             and row.away_form.complete()):
-        return ""
+        return _ratings_breakdown(row, season, rating_table)
     c = matrix.COEFFICIENTS
     lines = []
     for key in _ORDER:
@@ -182,7 +226,7 @@ home side&rsquo;s margin contribution: positive favours {esc(f.home)}.</p>
 </div></details>"""
 
 
-def _game_card(row: Row, season: int) -> str:
+def _game_card(row: Row, season: int, rating_table: dict[str, float]) -> str:
     f = row.forecast
     edge_cls = ""
     if f.edge_points is not None:
@@ -211,7 +255,7 @@ def _game_card(row: Row, season: int) -> str:
 <div class="gn"><span class="gn-l">Edge</span>
 <span class="gn-v {edge_cls}">{_fmt(f.edge_points)}</span></div>
 </div>
-{_breakdown(row, season)}
+{_breakdown(row, season, rating_table)}
 <div class="game-foot"><span class="badge {badge}">{esc(f.action.value)}</span>
 <span class="foot-note">{esc(note)}</span></div>
 </article>"""
@@ -301,7 +345,7 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
         "13.79 against a market of 12.00 — a 1.8-point gap, versus 0.37 from week 5 on."
         "</div>" % week)
 
-    cards = "".join(_game_card(r, season) for r in rows) or (
+    cards = "".join(_game_card(r, season, rating_table) for r in rows) or (
         '<p class="dim">No FBS-vs-FBS games found for this week.</p>')
 
     return f"""<!doctype html>
