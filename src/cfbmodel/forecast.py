@@ -34,12 +34,20 @@ DEFAULT_LAM = 0.0
 FIRST_VALIDATED_WEEK = 5
 
 # Points of margin per unit of combined efficiency-index edge, fitted by
-# regressing the ratings residual on the index edge over 3,256 games
-# (see reports/BASELINE_2019_2025.md). The intercept is a calibration term: on
-# FBS-vs-FBS games with complete prior form, the rating projection alone runs
-# about two points high for the home side.
+# regressing the ratings residual on the index edge over 3,256 games.
 EFFICIENCY_POINTS_PER_INDEX = 0.4842
-EFFICIENCY_INTERCEPT = -2.1204
+
+# Calibration constant applied to EVERY projection, with or without form.
+#
+# It corrects the rating projection itself, not the efficiency features: measured
+# directly, `ratings.projected_margin` runs +2.123 points high for the home side,
+# and the independently fitted intercept came out at -2.1204. Those matching to
+# three decimals is what identifies this as a ratings bias.
+#
+# It used to live inside the efficiency term, which meant it silently switched off
+# whenever form was missing -- exactly weeks 1-4, the regime that was already the
+# weakest. See reports/BASELINE_2019_2025.md.
+RATING_BIAS_CORRECTION = -2.1204
 
 
 @dataclass(frozen=True)
@@ -78,7 +86,7 @@ def _efficiency_edge(home: matrix.TeamForm | None, away: matrix.TeamForm | None)
         if off is None or dfn is None:
             return 0.0     # partial form is no form; never half-credit a team
         parts.append(sign * (off + dfn))
-    return EFFICIENCY_INTERCEPT + EFFICIENCY_POINTS_PER_INDEX * sum(parts)
+    return EFFICIENCY_POINTS_PER_INDEX * sum(parts)
 
 
 def game(
@@ -103,7 +111,10 @@ def game(
     in_regime = True if week is None else week >= FIRST_VALIDATED_WEEK
 
     base = ratings.projected_margin(team_ratings, home, away, neutral=neutral)
-    model_margin = None if base is None else base + _efficiency_edge(home_form, away_form)
+    model_margin = (
+        None if base is None
+        else base + RATING_BIAS_CORRECTION + _efficiency_edge(home_form, away_form)
+    )
 
     if market_margin is None:
         published = model_margin

@@ -51,3 +51,23 @@ def test_early_weeks_are_flagged_out_of_regime():
 def test_mid_season_is_in_regime():
     f = fc.game(home="A", away="B", team_ratings=RATINGS, week=10)
     assert f.in_validated_regime is True
+
+
+def test_bias_correction_applies_without_form():
+    """The correction fixes the RATINGS projection, so it must not switch off
+    when efficiency form is missing -- that was weeks 1-4, the weakest regime."""
+    bare = fc.game(home="A", away="B", team_ratings=RATINGS)
+    raw = RATINGS["A"] - RATINGS["B"] + 4.53
+    assert bare.model_margin == pytest.approx(raw + fc.RATING_BIAS_CORRECTION)
+
+
+def test_bias_correction_also_applies_with_form():
+    full = matrix.TeamForm(
+        success_rate=0.45, ppa_per_play=0.15, points_per_opportunity=4.0,
+        explosiveness=1.1, success_rate_allowed=0.42,
+        points_per_opportunity_allowed=4.2, ppa_allowed=0.10,
+        explosiveness_allowed=1.2, havoc_rate=0.15)
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, home_form=full, away_form=full)
+    raw = RATINGS["A"] - RATINGS["B"] + 4.53
+    # Identical forms cancel in the efficiency term, leaving only the correction.
+    assert f.model_margin == pytest.approx(raw + fc.RATING_BIAS_CORRECTION)
