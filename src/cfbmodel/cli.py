@@ -10,13 +10,15 @@ import argparse
 import statistics
 
 from cfbmodel import forecast as fc
-from cfbmodel import efficiency, matrix, ratings
+from cfbmodel import efficiency, matrix, preseason, ratings
 from cfbmodel.authority import current
 from cfbmodel.sources import cfbd
 
-# Weight on the prior season when the current one has too few games to stand alone.
-# Week 1 has no current-season signal at all, so the prior season is everything.
-CARRYOVER = 0.72
+def _prior_season(season: int) -> int:
+    """Most recent season worth carrying. 2020 is skipped: the COVID schedule
+    was not comparable, so 2021 carries 2019 forward instead."""
+    prior = season - 1
+    return 2019 if prior == 2020 else prior
 
 
 def _to_games(rows: list[dict]) -> list[ratings.Game]:
@@ -37,22 +39,18 @@ def _to_games(rows: list[dict]) -> list[ratings.Game]:
 def build_ratings(season: int, week: int) -> dict[str, float]:
     """Ratings known before `week` of `season`.
 
-    Blends the prior season (discounted -- rosters turn over hard in CFB) with
-    whatever the current season has produced so far. Early weeks lean almost
-    entirely on carryover, which is honest: nothing else is known yet.
+    A fitted preseason prior (prior seasons + talent + returning production +
+    recruiting) is blended with whatever the current season has produced. Worth
+    0.42 points of MAE in weeks 1-4 against the flat carryover it replaced --
+    see preseason.py.
     """
-    prior = ratings.build(_to_games(cfbd.games(season - 1, completed_only=True)))
+    p1 = ratings.build(_to_games(cfbd.games(_prior_season(season), completed_only=True)))
+    p2 = ratings.build(_to_games(cfbd.games(_prior_season(_prior_season(season)),
+                                            completed_only=True)))
+    prior = preseason.build(season, p1, p2)
     current_rows = [g for g in cfbd.games(season, completed_only=True) if g["week"] < week]
     live = ratings.build(_to_games(current_rows))
-    if not live:
-        return {t: v * CARRYOVER for t, v in prior.items()}
-    # Weight the live season in as it accumulates; by mid-season it dominates.
-    share = min(1.0, (week - 1) / 8.0)
-    teams = set(prior) | set(live)
-    return {
-        t: share * live.get(t, 0.0) + (1.0 - share) * CARRYOVER * prior.get(t, 0.0)
-        for t in teams
-    }
+    return preseason.blend(prior, live, week)
 
 
 def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
@@ -123,10 +121,11 @@ def cmd_board(args: argparse.Namespace) -> int:
         rows.append(f)
 
     if rows and not rows[0].in_validated_regime:
-        print(f"  [!] week {args.week} is before week {fc.FIRST_VALIDATED_WEEK}: no current-season")
-        print("      form exists, ratings are discounted carryover, and the slate is full of")
-        print("      mismatches the backtest never covered. Model margins below are OUT OF")
-        print("      REGIME - the market is the better estimate.")
+        print(f"  [!] week {args.week} is before week {fc.FIRST_VALIDATED_WEEK}: forecasts here use a")
+        print("      fitted preseason prior rather than observed form, and the slate is full")
+        print("      of mismatches the backtest never covered. Measured weeks 1-4 MAE is")
+        print("      13.79 against a market of 12.00 - a 1.8-point gap, versus 0.37 from")
+        print("      week 5 on. Treat the market as the better estimate here.")
         print()
     rows.sort(key=lambda f: abs(f.edge_points) if f.edge_points is not None else -1, reverse=True)
     print(f"  {'matchup':<44} {'model':>7} {'market':>7} {'edge':>7} {'win%':>6}  action")
