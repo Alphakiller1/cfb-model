@@ -143,6 +143,17 @@ def cmd_board(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_site(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from cfbmodel import site
+
+    path = site.build(season=args.season, week=args.week, out=Path(args.out))
+    size = path.stat().st_size
+    print(f"  wrote {path}  ({size:,} bytes)")
+    return 0
+
+
 def cmd_ratings(args: argparse.Namespace) -> int:
     r = build_ratings(args.season + 1, 1) if args.preseason else \
         ratings.build(_to_games(cfbd.games(args.season, completed_only=True)))
@@ -162,6 +173,12 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--season", type=int, required=True)
     b.add_argument("--week", type=int, required=True)
     b.set_defaults(func=cmd_board)
+
+    s_ = sub.add_parser("build-site", help="write the static dashboard")
+    s_.add_argument("--season", type=int, required=True)
+    s_.add_argument("--week", type=int, required=True)
+    s_.add_argument("--out", default="docs/index.html")
+    s_.set_defaults(func=cmd_build_site)
 
     t = sub.add_parser("ratings", help="power ratings")
     t.add_argument("--season", type=int, required=True)
