@@ -207,14 +207,20 @@ def _projection_rows(row: Row, season: int) -> str:
             f'<div class="bd-row"><span class="bd-k">Market total (consensus)</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
             f'<span class="bd-c">{f.market_total:.1f}</span></div>')
-    if f.book_margin is not None or f.book_total is not None:
-        label = f"Live book · {f.book_name}" if f.book_name else "Live book"
-        spread = f"{f.book_margin:+.1f}" if f.book_margin is not None else "—"
-        tot = f"{f.book_total:.1f}" if f.book_total is not None else "—"
+    # The two team columns hold per-team values, so a book spread and total must
+    # not sit in them -- they are game-level numbers and belong in the Pts column,
+    # one row each, the same way the consensus total is shown.
+    book = f" · {f.book_name}" if f.book_name else ""
+    if f.book_margin is not None:
         out.append(
-            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
-            f'<span class="bd-a">{esc(spread)}</span><span class="bd-h">{esc(tot)}</span>'
-            f'<span class="bd-c"></span></div>')
+            f'<div class="bd-row"><span class="bd-k">Live book spread{esc(book)}</span>'
+            f'<span class="bd-a"></span><span class="bd-h"></span>'
+            f'<span class="bd-c">{f.book_margin:+.1f}</span></div>')
+    if f.book_total is not None:
+        out.append(
+            f'<div class="bd-row"><span class="bd-k">Live book total{esc(book)}</span>'
+            f'<span class="bd-a"></span><span class="bd-h"></span>'
+            f'<span class="bd-c">{f.book_total:.1f}</span></div>')
     if f.projected_home_score is not None:
         out.append(
             f'<div class="bd-row bd-row--total"><span class="bd-k">Projected score</span>'
