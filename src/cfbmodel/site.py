@@ -204,9 +204,17 @@ def _projection_rows(row: Row, season: int) -> str:
             f'<span class="bd-c">{f.projected_total:.1f}</span></div>')
     if f.market_total is not None:
         out.append(
-            f'<div class="bd-row"><span class="bd-k">Market total</span>'
+            f'<div class="bd-row"><span class="bd-k">Market total (consensus)</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
             f'<span class="bd-c">{f.market_total:.1f}</span></div>')
+    if f.book_margin is not None or f.book_total is not None:
+        label = f"Live book · {f.book_name}" if f.book_name else "Live book"
+        spread = f"{f.book_margin:+.1f}" if f.book_margin is not None else "—"
+        tot = f"{f.book_total:.1f}" if f.book_total is not None else "—"
+        out.append(
+            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
+            f'<span class="bd-a">{esc(spread)}</span><span class="bd-h">{esc(tot)}</span>'
+            f'<span class="bd-c"></span></div>')
     if f.projected_home_score is not None:
         out.append(
             f'<div class="bd-row bd-row--total"><span class="bd-k">Projected score</span>'
@@ -545,6 +553,13 @@ def build(*, season: int, week: int, out: Path) -> Path:
     forms = cli._forms(season, week)
     market = cli._market(season, week)
     market_total = cli._market_totals(season, week)
+    # Live sportsbook lines are optional: no key, no quota, or no match simply
+    # means the board renders without a book row.
+    try:
+        from cfbmodel.sources import oddsapi
+        book_lines = oddsapi.fetch_lines(teams.load(season))
+    except Exception:
+        book_lines = {}
     slate = [g for g in cli.cfbd.games(season, week=week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
 
@@ -557,6 +572,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_total.get((home, away)),
+            book=book_lines.get((home, away)),
             authority=authority, week=week,
         )
         kickoff = (g.get("startDate") or "")[:10] or None

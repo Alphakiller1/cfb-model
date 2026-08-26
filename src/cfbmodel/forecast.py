@@ -69,6 +69,11 @@ class Forecast:
     projected_away_score: float | None = None
     total_modelled: bool = False
     market_total: float | None = None
+    # Live sportsbook line, distinct from the CFBD consensus used as the model's
+    # benchmark. Present only when an odds feed is configured and matched.
+    book_name: str | None = None
+    book_margin: float | None = None
+    book_total: float | None = None
 
     @property
     def has_price(self) -> bool:
@@ -109,6 +114,7 @@ def game(
     authority: Authority | None = None,
     week: int | None = None,
     market_total: float | None = None,
+    book: object | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -148,4 +154,7 @@ def game(
         projected_away_score=projection.away_score,
         total_modelled=projection.modelled,
         market_total=market_total,
+        book_name=getattr(book, "book_title", None),
+        book_margin=getattr(book, "home_margin", None),
+        book_total=getattr(book, "total", None),
     )

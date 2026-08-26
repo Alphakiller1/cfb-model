@@ -26,6 +26,8 @@ class Team:
     color: str | None
     alt_color: str | None
     logo: str | None
+    # Kept for odds-feed matching: the Odds API names teams "School Mascot".
+    mascot: str | None = None
 
     @property
     def short(self) -> str:
@@ -67,10 +69,11 @@ def load(season: int) -> dict[str, Team]:
             color=_normalise_hex(row.get("color")),
             alt_color=_normalise_hex(row.get("alternateColor")),
             logo=_pick_logo(row.get("logos")),
+            mascot=row.get("mascot"),
         )
     return out
 
 
 def get(season: int, school: str) -> Team:
     """Never raises: an unknown school still renders, just without a mark."""
-    return load(season).get(school) or Team(school, None, None, None, None, None)
+    return load(season).get(school) or Team(school, None, None, None, None, None, None)
