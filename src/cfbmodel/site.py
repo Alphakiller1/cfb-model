@@ -418,6 +418,12 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
         note = esc(f.edge_withheld_reason)
     elif not f.used_efficiency:
         note = "preseason prior — no observed form yet"
+    # Last, because it outranks the others: a programme in its first FBS season
+    # has no prior FBS rating to carry, and the pooled __FCS__ bucket is not a
+    # substitute (it is the average of hundreds of programmes). The model
+    # abstains rather than inventing a number, and the card says so.
+    if f.model_margin is None:
+        note = "no FBS rating yet — first season at this level"
     when = f'<div class="game-when">{esc(row.kickoff)}</div>' if row.kickoff else ""
     # On a neutral field neither team is hosting, so the card must not say "AT".
     # CFBD still designates a nominal home side (it is what the market quotes
