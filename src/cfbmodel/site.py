@@ -80,12 +80,68 @@ def _fmt(value: float | None, places: int = 1, sign: bool = True) -> str:
     return f"{value:+.{places}f}" if sign else f"{value:.{places}f}"
 
 
+# CFB kickoffs are quoted in Eastern time by every book and broadcaster, and a
+# board that spans a Thursday-to-Monday slate has to agree with them: a 10:30pm
+# ET Saturday game is 02:30 UTC *Sunday*, so labelling in UTC would file it
+# under the wrong day. `tzdata` is not a dependency (this package has none), so
+# a host without a zone database falls back to UTC rather than failing the build.
+try:  # pragma: no cover - depends on host tz database
+    from zoneinfo import ZoneInfo
+
+    _EASTERN: ZoneInfo | None = ZoneInfo("America/New_York")
+except Exception:  # pragma: no cover - Windows/slim images without tzdata
+    _EASTERN = None
+
+
+def _parse_kickoff(raw: str | None) -> datetime | None:
+    """CFBD `startDate` -> aware UTC datetime, or None when absent/unparseable."""
+    if not raw:
+        return None
+    text = raw.strip().replace("Z", "+00:00")
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=timezone.utc) if moment.tzinfo is None else moment
+
+
+def _kickoff_label(moment: datetime | None) -> str | None:
+    """`Sat Sep 5 · 7:30 PM ET` -- day included because a week spans five days."""
+    if moment is None:
+        return None
+    # Tested on the SOURCE moment, not the local one: a date with no time parses
+    # to midnight UTC, which converts to a perfectly plausible 8pm ET kickoff the
+    # evening before. Checking after conversion would invent a time that the feed
+    # never published, and file the game under the wrong day while doing it.
+    time_known = not (moment.hour == 0 and moment.minute == 0)
+    if _EASTERN is not None and time_known:
+        local, suffix = moment.astimezone(_EASTERN), "ET"
+    else:
+        local, suffix = moment, "UTC"
+    day = f"{local:%a} {local:%b} {local.day}"
+    if not time_known:
+        return f"{day} · time TBA"
+    clock = f"{local:%I:%M %p}".lstrip("0")
+    return f"{day} · {clock} {suffix}"
+
+
 @dataclass(frozen=True)
 class Row:
     forecast: fc.Forecast
     kickoff: str | None
     home_form: matrix.TeamForm | None
     away_form: matrix.TeamForm | None
+    # Full CFBD `startDate` (UTC, ISO 8601). `kickoff` is the formatted label;
+    # this is what the board sorts on, so ordering never depends on how the
+    # label happens to be rendered.
+    kickoff_utc: datetime | None = None
+
+    @property
+    def sort_key(self) -> tuple[int, float]:
+        """Chronological, with unscheduled games last rather than first."""
+        if self.kickoff_utc is None:
+            return (1, 0.0)
+        return (0, self.kickoff_utc.timestamp())
 
 
 # ── fragments ────────────────────────────────────────────────────────────────
@@ -95,6 +151,7 @@ def _nav(season: int, week: int) -> str:
 <div class="nav-links">
 <a class="nav-link" href="#board">Board</a>
 <a class="nav-link" href="#ratings">Power Ratings</a>
+<a class="nav-link" href="#conferences">Conferences</a>
 <a class="nav-link" href="#method">Methodology</a>
 </div>
 <div class="chase-status"><span class="product-tag">CFB MODEL</span>
@@ -331,9 +388,15 @@ def _breakdown(row: Row, season: int, rating_table: dict[str, float],
 def _game_card(row: Row, season: int, rating_table: dict[str, float],
                comps: dict | None = None) -> str:
     f = row.forecast
+    # An edge is coloured; a withheld gap is not. Colouring the preseason
+    # difference green/red made an information gap look like a directional call.
+    edge_label = "Edge" if f.edge_points is not None else "Gap"
+    edge_value = f.edge_points if f.edge_points is not None else f.market_gap
     edge_cls = ""
     if f.edge_points is not None:
         edge_cls = "gn-v--edge-pos" if f.edge_points > 0 else "gn-v--edge-neg"
+    elif f.market_gap is not None:
+        edge_cls = "gn-v--gap"
     badge = {
         "BET": "badge-bet", "MONITOR": "badge-monitor",
         "REVIEW": "badge-review", "AVOID": "badge-avoid",
@@ -347,16 +410,27 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
         total_sub = "league mean"
     else:
         total_sub = ""
+    gap_sub = ('<span class="gn-sub">not an edge</span>'
+               if f.edge_points is None and f.market_gap is not None else "")
     note = "model only — no market price" if not f.has_price else (
         "published margin = market at lam 0")
-    if not f.used_efficiency:
+    if f.edge_withheld_reason:
+        note = esc(f.edge_withheld_reason)
+    elif not f.used_efficiency:
         note = "preseason prior — no observed form yet"
     when = f'<div class="game-when">{esc(row.kickoff)}</div>' if row.kickoff else ""
-    neutral = '<div class="game-when">neutral site</div>' if f.neutral else ""
+    # On a neutral field neither team is hosting, so the card must not say "AT".
+    # CFBD still designates a nominal home side (it is what the market quotes
+    # against), and the board keeps that side on the right for consistency --
+    # but "VS" plus an explicit tag is the honest label, and it matches the
+    # breakdown, which zeroes the 4.53-point home-field term for these games.
+    joiner = "VS" if f.neutral else "AT"
+    neutral = ('<div class="game-when game-neutral">neutral site · no home field</div>'
+               if f.neutral else "")
     return f"""<article class="game">
 <div class="game-top">
 {_side(season, f.away, home=False, score=f.projected_away_score)}
-<div class="game-mid"><span class="game-at">AT</span>{when}{neutral}</div>
+<div class="game-mid"><span class="game-at">{joiner}</span>{when}{neutral}</div>
 {_side(season, f.home, home=True, score=f.projected_home_score)}
 </div>
 <div class="game-nums">
@@ -367,13 +441,71 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
 <div class="gn"><span class="gn-l">Total</span>
 <span class="gn-v{"" if f.projected_total is not None else " gn-v--na"}">{_fmt(f.projected_total, sign=False)}{total_star}</span>
 <span class="gn-sub">{total_sub}</span></div>
-<div class="gn"><span class="gn-l">Edge</span>
-<span class="gn-v {edge_cls}">{_fmt(f.edge_points)}</span></div>
+<div class="gn"><span class="gn-l">{edge_label}</span>
+<span class="gn-v {edge_cls}">{_fmt(edge_value)}</span>{gap_sub}</div>
 </div>
 {_breakdown(row, season, rating_table, comps)}
 <div class="game-foot"><span class="badge {badge}">{esc(f.action.value)}</span>
 <span class="foot-note">{esc(note)}</span></div>
 </article>"""
+
+
+def _conference_members(name, rating_table, conference_of) -> str:
+    """Ranked members of one conference, as a collapsed list.
+
+    The within-league ordering is the well-identified half of a conference
+    rating -- teams inside a conference play each other, so the solve has plenty
+    of edges connecting them. It is offered here next to the aggregate for that
+    reason, while the cross-league comparison carries the `x-conf` caveat.
+    """
+    members = sorted(
+        ((team, rating_table[team]) for team, conf in conference_of.items()
+         if conf == name and team in rating_table and team != ratings.FCS),
+        key=lambda pair: -pair[1],
+    )
+    if not members:
+        return ""
+    body = "".join(
+        f'<li><span class="cm-rank">{place}</span>'
+        f'<span class="cm-team">{esc(team)}</span>'
+        f'<span class="cm-val {"rt-pos" if value > 0 else "rt-neg"}">{value:+.2f}</span></li>'
+        for place, (team, value) in enumerate(members, start=1)
+    )
+    return (f'<details class="cm"><summary>{esc(name)} — {len(members)} teams</summary>'
+            f'<ol class="cm-list">{body}</ol></details>')
+
+
+def _conference_table(rows, rating_table=None, conference_of=None) -> str:
+    """Conference ratings. `depth` and `x-conf` are shown because a bare mean
+    invites a cross-league comparison the sparse schedule cannot support."""
+    if not rows:
+        return '<p class="sec-blurb">No conference had enough rated members.</p>'
+    body = "".join(
+        f'<tr><td class="rt-rank">{index}</td>'
+        f'<td class="cf-name">{esc(row.name)}</td>'
+        f'<td class="dim">{row.teams}</td>'
+        f'<td class="r"><span class="rt-rating '
+        f'{"rt-pos" if row.mean > 0 else "rt-neg"}">{row.mean:+.2f}</span></td>'
+        f'<td class="r dim">{row.median:+.2f}</td>'
+        f'<td class="r dim">{row.top_mean:+.2f}</td>'
+        f'<td class="r"><span class="{"cf-deep" if row.depth > 0 else "cf-top"}">'
+        f'{row.depth:+.2f}</span></td>'
+        f'<td class="r dim">{row.cross_games}</td>'
+        f'<td class="dim">{esc(row.best[0])} ({row.best[1]:+.1f})</td></tr>'
+        for index, row in enumerate(rows, start=1)
+    )
+    table = (
+        '<table class="rt cf"><thead><tr><th></th><th>Conference</th><th>Teams</th>'
+        '<th class="r">Mean</th><th class="r">Median</th><th class="r">Top 4</th>'
+        '<th class="r">Depth</th><th class="r">x-conf</th><th>Best</th>'
+        f'</tr></thead><tbody>{body}</tbody></table>'
+    )
+    if not (rating_table and conference_of):
+        return table
+    members = "".join(
+        _conference_members(row.name, rating_table, conference_of) for row in rows
+    )
+    return table + f'<div class="cm-wrap">{members}</div>' if members else table
 
 
 def _ratings_table(season: int, table: dict[str, float], limit: int = 40) -> str:
@@ -461,7 +593,11 @@ week 5 on. Treat the market as the better estimate early.</p></div>
 
 # ── page ─────────────────────────────────────────────────────────────────────
 def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, float],
-           authority: auth_mod.Authority, comps: dict | None = None) -> str:
+           authority: auth_mod.Authority, comps: dict | None = None,
+           conference_rows: list | None = None,
+           conference_of: dict[str, str] | None = None) -> str:
+    conference_table = _conference_table(conference_rows or [], rating_table,
+                                         conference_of or {})
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     in_regime = week >= fc.FIRST_VALIDATED_WEEK
     regime_pill = ('<span class="pill pill-ok">validated regime</span>' if in_regime
@@ -522,8 +658,19 @@ projected neutral margin between two teams is the difference of their ratings.</
 {_ratings_table(season, rating_table)}
 </section>
 
+<section id="conferences">
+<div class="sec-eyebrow">03 · Conferences</div>
+<h2 class="sec-title">Conference Ratings</h2>
+<p class="sec-blurb"><b>Depth</b> is median minus mean: positive is a deep league,
+negative means the mean is carried by its top teams. <b>x-conf</b> counts the
+completed out-of-conference games informing the rating — cross-conference
+scheduling is sparse, so a league&rsquo;s <i>level</i> is less firmly identified
+than the ordering inside it.</p>
+{conference_table}
+</section>
+
 <section id="method">
-<div class="sec-eyebrow">03 · Method</div>
+<div class="sec-eyebrow">04 · Method</div>
 <h2 class="sec-title">Methodology</h2>
 <p class="sec-blurb">Every constant below was measured on 3,256 out-of-sample games rather
 than assumed. Full evidence lives in <code>reports/BASELINE_2019_2025.md</code>.</p>
@@ -581,13 +728,33 @@ def build(*, season: int, week: int, out: Path) -> Path:
             book=book_lines.get((home, away)),
             authority=authority, week=week,
         )
-        kickoff = (g.get("startDate") or "")[:10] or None
-        rows.append(Row(forecast, kickoff, forms.get(home), forms.get(away)))
+        moment = _parse_kickoff(g.get("startDate"))
+        rows.append(Row(forecast, _kickoff_label(moment), forms.get(home),
+                        forms.get(away), kickoff_utc=moment))
 
-    rows.sort(key=lambda r: abs(r.forecast.edge_points) if r.forecast.edge_points is not None else -1,
-              reverse=True)
+    # Chronological. Sorting by |edge| ranked the board by the size of the
+    # model's disagreement with the price, which at lam = 0 buys nothing: the
+    # biggest "edges" are the widest spreads, where a compressed model always
+    # lands on the underdog (see forecast.py). Kickoff order is what a slate
+    # actually is, and it stops the ordering from implying a conviction the
+    # authority gate says the model has not earned.
+    rows.sort(key=lambda r: (r.sort_key, r.forecast.away, r.forecast.home))
+    # Conference ratings are an aggregate of the table above, not a separate
+    # model, so they are computed here rather than fetched.
+    try:
+        from cfbmodel import conferences, teams as teams_mod
+        meta = teams_mod.load(season)
+        conference_of = {n: t.conference for n, t in meta.items() if t.conference}
+        completed = cli._to_games(cli.cfbd.games(season, completed_only=True))
+        conference_rows = conferences.rate(
+            rating_table, conference_of,
+            cross_counts=conferences.cross_conference_games(completed, conference_of),
+        )
+    except Exception:
+        conference_rows, conference_of = [], {}
     html_text = render(season=season, week=week, rows=rows,
-                       rating_table=rating_table, authority=authority, comps=comps)
+                       rating_table=rating_table, authority=authority, comps=comps,
+                       conference_rows=conference_rows, conference_of=conference_of)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
     return out
