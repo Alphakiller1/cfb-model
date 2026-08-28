@@ -6,3 +6,10 @@ __pycache__/
 .venv/
 data/cache/
 *.parquet
+
+# Generated social/graphic output: rendered PNGs, downloaded third-party logos,
+# and scratch capture scripts. Never tracked, and nothing in src/ or scripts/
+# reads from it. Ignored because a `git add -A` swept 31 of these files into an
+# unrelated commit once. Force-add (`git add -f`) a specific deliverable if one
+# is ever meant to ship.
+outputs/
