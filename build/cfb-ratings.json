@@ -1,0 +1,397 @@
+{
+  "schema_version": "1.1.0",
+  "sport": "cfb",
+  "kind": "power_ratings",
+  "season": 2026,
+  "week": 1,
+  "basis": "preseason",
+  "generated_at": "2026-08-27T22:45:24Z",
+  "order": "rating_desc",
+  "scale": "points vs an average FBS team on a neutral field",
+  "home_field_points": 4.53,
+  "blowout_cap": 32.0,
+  "team_count": 136,
+  "games_rated": 0,
+  "league": {
+    "mean": 0.3454,
+    "sd": 6.4562,
+    "min": -17.13,
+    "max": 16.62
+  },
+  "authority": {
+    "level": "RESEARCH_ONLY",
+    "may_bet": false,
+    "evidence": "reports/BASELINE_2019_2025.md - walk-forward on 3,256 out-of-sample FBS games, opponent-adjusted: model MAE 12.5251 vs closing market 12.1596 (0.3655 worse); ATS on disagreements 51.11%, 95% CI [49.39%, 52.84%] - straddles the 52.38% breakeven, so unproven rather than confidently losing",
+    "unmet_gates": [
+      "timestamped_quote_coverage_at_least_0.98",
+      "model_mae_below_closing_market",
+      "ats_lower_confidence_bound_above_breakeven",
+      "roi_lower_confidence_bound_above_zero_after_cost",
+      "probability_space_clv_above_zero",
+      "calibration_ece_at_most_0.025",
+      "shadow_days_at_least_90"
+    ]
+  },
+  "teams": [
+    {
+      "school": "Ohio State",
+      "abbreviation": "OSU",
+      "conference": "Big Ten",
+      "color": "#ba0c2f",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/194.png",
+      "rank": 1,
+      "rating": 16.62
+    },
+    {
+      "school": "Notre Dame",
+      "abbreviation": "ND",
+      "conference": "FBS Independents",
+      "color": "#0c2340",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/87.png",
+      "rank": 2,
+      "rating": 15.55
+    },
+    {
+      "school": "Oregon",
+      "abbreviation": "ORE",
+      "conference": "Big Ten",
+      "color": "#007030",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2483.png",
+      "rank": 3,
+      "rating": 15.21
+    },
+    {
+      "school": "Texas",
+      "abbreviation": "TEX",
+      "conference": "SEC",
+      "color": "#bf5700",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/251.png",
+      "rank": 4,
+      "rating": 13.61
+    },
+    {
+      "school": "Georgia",
+      "abbreviation": "UGA",
+      "conference": "SEC",
+      "color": "#ba0c2f",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/61.png",
+      "rank": 5,
+      "rating": 13.58
+    },
+    {
+      "school": "Texas A&M",
+      "abbreviation": "TA&M",
+      "conference": "SEC",
+      "color": "#500000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/245.png",
+      "rank": 6,
+      "rating": 12.72
+    },
+    {
+      "school": "Miami",
+      "abbreviation": "MIA",
+      "conference": "ACC",
+      "color": "#f47321",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2390.png",
+      "rank": 7,
+      "rating": 12.39
+    },
+    {
+      "school": "Texas Tech",
+      "abbreviation": "TTU",
+      "conference": "Big 12",
+      "color": "#c30020",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2641.png",
+      "rank": 8,
+      "rating": 12.21
+    },
+    {
+      "school": "Ole Miss",
+      "abbreviation": "MISS",
+      "conference": "SEC",
+      "color": "#13294b",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/145.png",
+      "rank": 9,
+      "rating": 11.85
+    },
+    {
+      "school": "Indiana",
+      "abbreviation": "IU",
+      "conference": "Big Ten",
+      "color": "#990000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/84.png",
+      "rank": 10,
+      "rating": 11.81
+    },
+    {
+      "school": "Alabama",
+      "abbreviation": "ALA",
+      "conference": "SEC",
+      "color": "#9e1b32",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/333.png",
+      "rank": 11,
+      "rating": 10.47
+    },
+    {
+      "school": "USC",
+      "abbreviation": "USC",
+      "conference": "Big Ten",
+      "color": "#990000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/30.png",
+      "rank": 12,
+      "rating": 10.44
+    },
+    {
+      "school": "Utah",
+      "abbreviation": "UTAH",
+      "conference": "Big 12",
+      "color": "#be0000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/254.png",
+      "rank": 13,
+      "rating": 9.33
+    },
+    {
+      "school": "South Carolina",
+      "abbreviation": "SC",
+      "conference": "SEC",
+      "color": "#73000a",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2579.png",
+      "rank": 14,
+      "rating": 9.33
+    },
+    {
+      "school": "SMU",
+      "abbreviation": "SMU",
+      "conference": "ACC",
+      "color": "#d70000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2567.png",
+      "rank": 15,
+      "rating": 9.21
+    },
+    {
+      "school": "Tennessee",
+      "abbreviation": "TENN",
+      "conference": "SEC",
+      "color": "#ff8200",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2633.png",
+      "rank": 16,
+      "rating": 9.15
+    },
+    {
+      "school": "BYU",
+      "abbreviation": "BYU",
+      "conference": "Big 12",
+      "color": "#003da5",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/252.png",
+      "rank": 17,
+      "rating": 9.14
+    },
+    {
+      "school": "Oklahoma",
+      "abbreviation": "OU",
+      "conference": "SEC",
+      "color": "#841617",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/201.png",
+      "rank": 18,
+      "rating": 8.32
+    },
+    {
+      "school": "Washington",
+      "abbreviation": "WASH",
+      "conference": "Big Ten",
+      "color": "#33006f",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/264.png",
+      "rank": 19,
+      "rating": 7.65
+    },
+    {
+      "school": "Louisville",
+      "abbreviation": "LOU",
+      "conference": "ACC",
+      "color": "#c9001f",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/97.png",
+      "rank": 20,
+      "rating": 7.55
+    },
+    {
+      "school": "Missouri",
+      "abbreviation": "MIZ",
+      "conference": "SEC",
+      "color": "#f1b82d",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/142.png",
+      "rank": 21,
+      "rating": 7.45
+    },
+    {
+      "school": "Vanderbilt",
+      "abbreviation": "VAN",
+      "conference": "SEC",
+      "color": "#000000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/238.png",
+      "rank": 22,
+      "rating": 7.44
+    },
+    {
+      "school": "Clemson",
+      "abbreviation": "CLEM",
+      "conference": "ACC",
+      "color": "#f56600",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/228.png",
+      "rank": 23,
+      "rating": 6.83
+    },
+    {
+      "school": "LSU",
+      "abbreviation": "LSU",
+      "conference": "SEC",
+      "color": "#461d7c",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/99.png",
+      "rank": 24,
+      "rating": 6.8
+    },
+    {
+      "school": "Iowa",
+      "abbreviation": "IOWA",
+      "conference": "Big Ten",
+      "color": "#000000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2294.png",
+      "rank": 25,
+      "rating": 6.6
+    },
+    {
+      "school": "Michigan",
+      "abbreviation": "MICH",
+      "conference": "Big Ten",
+      "color": "#00274c",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/130.png",
+      "rank": 26,
+      "rating": 6.58
+    },
+    {
+      "school": "Arizona",
+      "abbreviation": "ARIZ",
+      "conference": "Big 12",
+      "color": "#cc0033",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/12.png",
+      "rank": 27,
+      "rating": 4.74
+    },
+    {
+      "school": "Florida",
+      "abbreviation": "FLA",
+      "conference": "SEC",
+      "color": "#0021a5",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/57.png",
+      "rank": 28,
+      "rating": 4.74
+    },
+    {
+      "school": "Pittsburgh",
+      "abbreviation": "PITT",
+      "conference": "ACC",
+      "color": "#003594",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/221.png",
+      "rank": 29,
+      "rating": 4.6
+    },
+    {
+      "school": "Boise State",
+      "abbreviation": "BOIS",
+      "conference": "Pac-12",
+      "color": "#0033a0",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/68.png",
+      "rank": 30,
+      "rating": 4.29
+    },
+    {
+      "school": "NC State",
+      "abbreviation": "NCSU",
+      "conference": "ACC",
+      "color": "#cc0000",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/152.png",
+      "rank": 31,
+      "rating": 4.2
+    },
+    {
+      "school": "Arizona State",
+      "abbreviation": "ASU",
+      "conference": "Big 12",
+      "color": "#ffc627",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/9.png",
+      "rank": 32,
+      "rating": 4.15
+    },
+    {
+      "school": "Georgia Tech",
+      "abbreviation": "GT",
+      "conference": "ACC",
+      "color": "#b3a369",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/59.png",
+      "rank": 33,
+      "rating": 4.09
+    },
+    {
+      "school": "Illinois",
+      "abbreviation": "ILL",
+      "conference": "Big Ten",
+      "color": "#ff5f05",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/356.png",
+      "rank": 34,
+      "rating": 4.02
+    },
+    {
+      "school": "Penn State",
+      "abbreviation": "PSU",
+      "conference": "Big Ten",
+      "color": "#001e44",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/213.png",
+      "rank": 35,
+      "rating": 4.0
+    },
+    {
+      "school": "Baylor",
+      "abbreviation": "BAY",
+      "conference": "Big 12",
+      "color": "#154734",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/239.png",
+      "rank": 36,
+      "rating": 3.77
+    },
+    {
+      "school": "Houston",
+      "abbreviation": "HOU",
+      "conference": "Big 12",
+      "color": "#c8102e",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/248.png",
+      "rank": 37,
+      "rating": 3.76
+    },
+    {
+      "school": "Minnesota",
+      "abbreviation": "MINN",
+      "conference": "Big Ten",
+      "color": "#7a0019",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/135.png",
+      "rank": 38,
+      "rating": 3.54
+    },
+    {
+      "school": "Florida State",
+      "abbreviation": "FSU",
+      "conference": "ACC",
+      "color": "#782f40",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/52.png",
+      "rank": 39,
+      "rating": 3.49
+    },
+    {
+      "school": "TCU",
+      "abbreviation": "TCU",
+      "conference": "Big 12",
+      "color": "#4d1979",
+      "logo": "https://cdn.collegefootballdata.com/logos/500/2628.png",
+      "rank": 40,
+      "rating": 3.26
+    }
+  ]
+}

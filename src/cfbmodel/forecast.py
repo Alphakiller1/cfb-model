@@ -58,12 +58,22 @@ class Forecast:
     market_margin: float | None
     margin: float | None
     win_probability: float | None
+    # Signed difference between the model and the price, published ONLY where it
+    # is a disagreement the model has earned. See `_edge` for why the preseason
+    # path returns None here and reports `market_gap` instead.
     edge_points: float | None
+    # The raw model-minus-market difference, always present when both exist. In
+    # the preseason regime this is dominated by information the market has and
+    # the model does not, so it is a diagnostic, not an opportunity.
+    market_gap: float | None
     market_anchored: bool
     action: Action
     authority: Authority
     in_validated_regime: bool = True
     used_efficiency: bool = False
+    # Why `edge_points` is None despite a price being available. None when the
+    # edge is published.
+    edge_withheld_reason: str | None = None
     projected_total: float | None = None
     projected_home_score: float | None = None
     projected_away_score: float | None = None
@@ -101,6 +111,47 @@ def _model_margin(
     return base + RATING_BIAS_CORRECTION, False
 
 
+def _edge(
+    market_gap: float | None,
+    *,
+    used_efficiency: bool,
+    in_regime: bool,
+) -> tuple[float | None, str | None]:
+    """Decide whether the model-minus-market difference is publishable as an edge.
+
+    It is not, on the preseason path -- but for a different reason than the one
+    first written here, and the correction matters.
+
+    Measured 2026-08-27 over 1,015 completed preseason-path games (2021-2025,
+    weeks 1-6), the calibration slope of actual margin on model margin is
+    **1.020**. The model is correctly SCALED. An earlier reading of a single
+    2026 week-1 board put that slope near 0.5 and concluded the estimate was
+    compressed; against real outcomes on a sample twenty times larger it is not.
+    Week 1 is the most buy-game-heavy week of the season and 49 games was too
+    few to see it.
+
+    What survives is an information gap, not a scale error. On the same games
+    the model's MAE is 13.9129 against the market's 12.0770 -- **1.84 points
+    worse** -- and its dispersion is 0.81 of the market's. Both estimators are
+    calibrated; the market simply conditions on more (transfer portal beyond
+    what is fitted here, injuries, availability, everything priced between the
+    Sunday opener and kickoff). In the validated regime the same gap is 0.54
+    points and dispersion 0.95.
+
+    So the difference between the two numbers is dominated by what the market
+    knows and the model does not. Publishing it as an "edge" would assert that
+    the model has found something, when what it has found is its own blind spot.
+    The difference stays visible as `market_gap` and is not called an edge.
+    """
+    if market_gap is None:
+        return None, None
+    if not used_efficiency:
+        return None, "preseason prior — difference is the information gap, not an edge"
+    if not in_regime:
+        return None, f"week < {FIRST_VALIDATED_WEEK} — outside the validated regime"
+    return market_gap, None
+
+
 def game(
     *,
     home: str,
@@ -127,11 +178,12 @@ def game(
         model_margin, used_efficiency = _model_margin(base, home_form, away_form)
 
     if market_margin is None:
-        published, anchored, edge = model_margin, False, None
+        published, anchored, market_gap = model_margin, False, None
     else:
         anchored = True
-        edge = None if model_margin is None else model_margin - market_margin
-        published = market_margin if edge is None else market_margin + lam * edge
+        market_gap = None if model_margin is None else model_margin - market_margin
+        published = market_margin if market_gap is None else market_margin + lam * market_gap
+    edge, withheld = _edge(market_gap, used_efficiency=used_efficiency, in_regime=in_regime)
 
     win_p = None if published is None else ratings.win_probability(published)
     # The scoreline is the MODEL's projection: model margin + model total. It is
@@ -144,11 +196,13 @@ def game(
         home=home, away=away, neutral=neutral,
         model_margin=model_margin, market_margin=market_margin,
         margin=published, win_probability=win_p, edge_points=edge,
+        market_gap=market_gap,
         market_anchored=anchored,
         action=auth.action_for(edge, market_margin is not None),
         authority=auth,
         in_validated_regime=in_regime,
         used_efficiency=used_efficiency,
+        edge_withheld_reason=withheld,
         projected_total=projection.total,
         projected_home_score=projection.home_score,
         projected_away_score=projection.away_score,

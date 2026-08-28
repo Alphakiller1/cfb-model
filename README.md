@@ -65,8 +65,43 @@ pip install -e .
 cp .env.example .env          # then add a free key from collegefootballdata.com/key
 
 python -m cfbmodel.cli ratings --season 2025 --top 25
-python -m cfbmodel.cli board --season 2026 --week 1
+python -m cfbmodel.cli board --season 2026 --week 1          # kickoff order
+python -m cfbmodel.cli export --season 2026 --week 1 --out build/wk1.json
+python -m cfbmodel.cli calibrate --seasons 2019,2021-2025    # scale diagnostic
+
+# ranked ratings as JSON, for the content engine's power-ratings carousel
+python -m cfbmodel.cli ratings --season 2025 --preseason --top 40 --out build/ratings.json
 ```
+
+`ratings --preseason` carries into the *next* season and is labelled with it: the payload
+says `basis: preseason` and `games_rated: 0`, because a fitted prior and an in-season rating
+are indistinguishable as numbers and a renderer has to be able to tell them apart. The
+payload also carries the FBS mean and spread over **every** rated team, so a downstream
+graphic showing the top 40 grades them against the league rather than against each other.
+
+## Why the board shows no edge before week 5
+
+The model used to land on the market underdog in 43 of 49 week-1 games, and in
+**every** game priced above a touchdown. That was not an opinion — it was scale.
+Measured dispersion against the market is **0.96** in the validated regime and
+**0.53** in week 1, and the gap between those two numbers is information the
+price has before kickoff that the model does not: transfer portal, quarterback
+specifically rather than blended returning production, coaching changes,
+availability. A conditional mean shrinks when it conditions on less, and that is
+correct behaviour.
+
+So the difference is still published, as `market_gap`, and it is no longer called
+an edge: `edge_points` is `None` outside the validated regime and
+`edge_withheld_reason` names the rule. Inflating the estimate to match a
+better-informed one was the alternative, and it was rejected twice over —
+expansion is monotonically worse on MAE (12.9749 → 13.6962, measured), and it
+would manufacture confidence the model has not earned.
+
+`calibration.py` measures the slope that MAE cannot see; run `cfbmodel calibrate`
+to fit it per regime against actual outcomes. `calibration.PRESEASON` ships as
+identity on purpose. Full evidence and the open work — a tier/conference term,
+FCS stratification, and the unwired transfer portal — are in
+[`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
 ## How it fits together
 
@@ -78,6 +113,12 @@ python -m cfbmodel.cli board --season 2026 --week 1
 | `matrix.py` | Fitted matrix. Weight groups are the interpretation; `COEFFICIENTS` is the predictor. |
 | `totals.py` | Combined-points model and the projected scoreline derived from it. |
 | `forecast.py` | Market-anchored game forecast, with a validated-regime flag. |
+| `calibration.py` | Is a margin on the right *scale*? The diagnostic MAE cannot give. |
+| `roster.py` | Transfer portal, quarterback-specific returning production. |
+| `coaching.py` | First-year staff, and the tendency profile a hire brings. |
+| `venue.py` | Elevation, travel, and body-clock terms for home field. |
+| `fitting.py` | Stdlib OLS and the leave-one-season-out adoption harness. |
+| `export.py` | The board as JSON, for downstream renderers. |
 | `authority.py` | What a forecast is *allowed* to be used for. |
 
 ### Point-in-time is enforced, not hoped for

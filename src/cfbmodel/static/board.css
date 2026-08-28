@@ -209,3 +209,30 @@ footer p+p{margin-top:8px}
   .bd-a,.bd-h,.bd-c{min-width:48px}
   .bd-head-row span:not(:first-child){min-width:48px}
 }
+
+/* Neutral-site tag. Gold is the token set's eyebrow colour: it marks the one
+   piece of game context that changes how the margin was built (no home field)
+   without competing with the numbers below it. */
+.game-neutral{color:var(--gold,#E8C24A);letter-spacing:.06em;text-transform:uppercase;font-size:10px}
+
+/* A withheld gap. Deliberately NOT on the green/red edge ramp: the preseason
+   difference between the model and the price is the information gap, and
+   colouring it by sign made it read as a directional call the model never made. */
+.gn-v--gap{color:var(--text-3)}
+
+/* Conference table. `depth` is the one column with a sign that means something
+   other than "good/bad", so it gets its own pair rather than the rating ramp. */
+.cf .cf-name{font-family:var(--display);font-weight:700;letter-spacing:.01em}
+.cf-deep{color:var(--violet-light,#C4B0FF)}
+.cf-top{color:var(--gold,#E8C24A)}
+
+/* Ranked members inside a conference. Collapsed by default: nine leagues of
+   twelve-plus teams would otherwise bury the aggregate table above them. */
+.cm-wrap{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.cm{background:var(--surface,#12141D);border:1px solid var(--border,#262A38);border-radius:10px;padding:10px 12px}
+.cm summary{cursor:pointer;font-family:var(--display);font-weight:700;letter-spacing:.02em;color:var(--text-2,#A4A8B6)}
+.cm-list{list-style:none;margin:10px 0 0;padding:0}
+.cm-list li{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px}
+.cm-rank{width:22px;text-align:right;color:var(--text-4,#4C5161);font-variant-numeric:tabular-nums}
+.cm-team{flex:1;color:var(--text,#F5F6FA)}
+.cm-val{font-variant-numeric:tabular-nums}

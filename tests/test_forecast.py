@@ -18,9 +18,36 @@ def test_lam_one_publishes_the_model():
     assert f.margin == pytest.approx(f.model_margin)
 
 
-def test_edge_is_model_minus_market():
+def test_market_gap_is_model_minus_market():
     f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0)
-    assert f.edge_points == pytest.approx(f.model_margin - 12.0)
+    assert f.market_gap == pytest.approx(f.model_margin - 12.0)
+
+
+def test_the_preseason_path_reports_a_gap_but_withholds_the_edge():
+    """The ratings-only estimate conditions on far less than the price does, so
+    the difference is the information gap rather than a disagreement."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0)
+    assert f.used_efficiency is False
+    assert f.market_gap is not None
+    assert f.edge_points is None
+    assert "information gap" in f.edge_withheld_reason
+
+
+def test_the_full_regime_publishes_the_edge():
+    form = matrix.TeamForm(**{field: 0.5 for field in matrix.TeamForm.FIELDS})
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0,
+                home_form=form, away_form=form, week=8)
+    assert f.used_efficiency is True
+    assert f.edge_points == pytest.approx(f.market_gap)
+    assert f.edge_withheld_reason is None
+
+
+def test_an_early_week_withholds_the_edge_even_with_form():
+    form = matrix.TeamForm(**{field: 0.5 for field in matrix.TeamForm.FIELDS})
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0,
+                home_form=form, away_form=form, week=2)
+    assert f.edge_points is None
+    assert "validated regime" in f.edge_withheld_reason
 
 
 def test_without_a_price_there_is_no_edge_and_no_anchor():

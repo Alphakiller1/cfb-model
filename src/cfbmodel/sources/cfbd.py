@@ -196,6 +196,41 @@ def returning_production(season: int) -> list[dict]:
     return get(f"/player/returning?year={season}")
 
 
+def portal(season: int) -> list[dict]:
+    """Transfer portal entries for a season.
+
+    Rows carry `origin`, `destination`, `position`, `stars`, `rating`. A player
+    who has not signed anywhere yet has a null `destination`, which is a real
+    state and not a parse failure -- `roster.py` treats it as a departure with no
+    matching arrival.
+    """
+    return get(f"/player/portal?year={season}")
+
+
+def coaches(season: int, *, history: int = 0) -> list[dict]:
+    """Coaching records. Each row is a coach with a `seasons` list.
+
+    `history` is not optional in practice. `?year=` filters the nested `seasons`
+    list down to that single year, so every coach comes back looking like a
+    first-year hire with no record -- which is exactly wrong for the two things
+    this feed exists to answer (is the staff new, and what does this coach do).
+    Passing `history=n` uses `minYear`/`maxYear` instead and returns the real
+    run of seasons.
+    """
+    if history > 0:
+        return get(f"/coaches?minYear={season - history}&maxYear={season}")
+    return get(f"/coaches?year={season}")
+
+
+def venues() -> list[dict]:
+    """Every venue: elevation, dome, and `location` lat/long.
+
+    Not season-scoped, so it is cached permanently. Lets home field vary by
+    venue instead of applying one 4.53-point constant to all 136 programmes.
+    """
+    return get("/venues")
+
+
 # ── Market ───────────────────────────────────────────────────────────────────
 def lines(season: int, *, week: int | None = None, season_type: str = "regular") -> list[dict]:
     path = f"/lines?year={season}&seasonType={season_type}"

@@ -46,12 +46,34 @@ from cfbmodel.sources import cfbd
 # Fitted on 788 team-seasons (2019, 2021-2025). Talent and recruiting enter
 # centred on that season's FBS mean, so the intercept stays interpretable.
 COEFFICIENTS = {
-    "intercept": -4.491291,
-    "prior_rating": 0.392005,
-    "prior_rating_2": 0.153911,
-    "talent": 0.002221,
-    "returning_production": 4.279209,
-    "recruiting_points": 0.038215,
+    "intercept": -3.462662,
+    "prior_rating": 0.392277,
+    "prior_rating_2": 0.158761,
+    "talent": 0.003267,
+    "returning_production": 3.480384,
+    "recruiting_points": 0.032038,
+}
+
+# Roster and staff terms, refitted 2026-08-27 over 658 team-seasons (2021-2025),
+# leave-one-season-out. Held-out MAE 5.1055 -> 5.0526 in rating points.
+#
+# `coach_shift_explosiveness` and `coach_tenure` were fitted and then DROPPED:
+# their fold-to-fold SD exceeded the magnitude of their own mean, so they
+# changed sign between folds. `cli fit-preseason` re-runs the prune every time,
+# so a term that stops generalising falls out rather than persisting.
+#
+# The headline is `first_year_coach` at -2.65 +/- 0.42: a new head office costs
+# about two and a half rating points, and it is the one fact here the ratings
+# provably cannot infer -- a coaching change leaves no trace in last season's
+# margins. See docs/DATA_SOURCES.md and reports/BASELINE_2019_2025.md.
+EXTRA_COEFFICIENTS = {
+    "qb_returning": 0.128062,
+    "portal_net": 0.090720,
+    "portal_churn": 0.032986,
+    "coach_shift_defensive_havoc": 21.308964,
+    "coach_shift_pass_rate": 4.500083,
+    "coach_shift_tempo": 1.170290,
+    "first_year_coach": -2.648581,
 }
 
 # Share of the current season folded in per completed week. Tuned on weeks 1-4:
@@ -186,9 +208,19 @@ def components(
     season: int,
     prior_ratings: dict[str, float],
     prior_ratings_2: dict[str, float] | None = None,
+    extra: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Components]:
-    """Per-team preseason rating with every term kept separate."""
+    """Per-team preseason rating with every term kept separate.
+
+    `extra` carries the roster and staff features (`roster.features` /
+    `coaching.features`). A team missing from it simply gets no contribution
+    from those terms, which is the right default: every one is centred on the
+    FBS mean, so absent means "no information", not "below average".
+    """
     prior_ratings_2 = prior_ratings_2 or {}
+    extra = extra or {}
+    # talent_composite reports which source it used, so the breakdown can label a
+    # reconstructed figure rather than presenting it as a published one.
     raw_talent, talent_source = talent_composite(season)
     talent, _ = _centred(raw_talent)
     recruiting, _ = _centred(_recruiting(season))
@@ -213,7 +245,11 @@ def components(
             rating=0.0,
             talent_source=talent_source,
         )
-        total = (terms.intercept + terms.prior_rating[1] + terms.prior_rating_2[1]
+        bonus_values = extra.get(team, {})
+        bonus = sum(EXTRA_COEFFICIENTS[name] * value
+                    for name, value in bonus_values.items()
+                    if name in EXTRA_COEFFICIENTS)
+        total = (bonus + terms.intercept + terms.prior_rating[1] + terms.prior_rating_2[1]
                  + terms.talent[1] + terms.returning_production[1]
                  + terms.recruiting_points[1])
         out[team] = Components(
@@ -233,9 +269,24 @@ def build(
     season: int,
     prior_ratings: dict[str, float],
     prior_ratings_2: dict[str, float] | None = None,
+    extra: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, float]:
     """Preseason rating for every team with a prior-season rating."""
-    return {t: c.rating for t, c in components(season, prior_ratings, prior_ratings_2).items()}
+    return {
+        t: c.rating
+        for t, c in components(season, prior_ratings, prior_ratings_2, extra).items()
+    }
+
+
+def roster_features(season: int) -> dict[str, dict[str, float]]:
+    """Assemble the `extra` block. Any feed failure degrades to {} per team."""
+    from cfbmodel import coaching, roster
+
+    merged: dict[str, dict[str, float]] = {}
+    for source in (roster.features(season), coaching.features(season)):
+        for team, values in source.items():
+            merged.setdefault(team, {}).update(values)
+    return merged
 
 
 def blend(preseason: dict[str, float], in_season: dict[str, float], week: int) -> dict[str, float]:
