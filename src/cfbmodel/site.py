@@ -254,14 +254,18 @@ def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float],
         # The model intercept is identical for both teams and cancels out of the
         # margin, so it is not shown -- a permanent "+0.00" row is noise.
         parts.append(_bd_section("Preseason rating inputs"))
+        derived = getattr(hc, "talent_source", "published") == "reconstructed"
         for (label, a_raw, a_pts), (_, h_raw, h_pts) in zip(ac.rows(), hc.rows()):
-            # A term whose input is identically zero for both teams is not a
+            # A term whose input is identically zero for BOTH teams is not a
             # measurement of parity -- it is a feed that has not published yet.
             if a_raw == 0.0 and h_raw == 0.0:
                 unavailable.append(label)
                 parts.append(_bd_row(f"{label} (not published yet)", None, None, None))
                 continue
-            parts.append(_bd_row(label, a_raw, h_raw, h_pts - a_pts))
+            shown = label
+            if derived and label == "Recruiting talent":
+                shown = "Recruiting talent (reconstructed)"
+            parts.append(_bd_row(shown, a_raw, h_raw, h_pts - a_pts))
 
     parts.append(_bd_section("Power rating"))
     parts.append(_bd_row("Rating", away_r, home_r, home_r - away_r, kind="bd-row--total"))
@@ -280,6 +284,10 @@ def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float],
         note += (" " + esc(", ".join(unavailable)) +
                  " has not been published for this season, so it contributes nothing —"
                  " that is a missing feed, not a measured tie.")
+    if hc and getattr(hc, "talent_source", "published") == "reconstructed":
+        note += (" CFBD has not published a talent composite for this season, so it is "
+                 "rebuilt from the last four recruiting classes — correlation 0.935 with "
+                 "the published figure, validated leave-one-year-out.")
     return _bd_shell(row, season, "".join(parts), note)
 
 

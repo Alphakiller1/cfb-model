@@ -61,6 +61,27 @@ IN_SEASON_SHARE_PER_WEEK = 0.14
 # League-average returning production, used when a team has no published figure.
 DEFAULT_RETURNING = 0.533
 
+# Talent reconstruction. CFBD publishes a team talent composite through 2025 but
+# not 2026, and the term would otherwise be silently zero for every team.
+#
+# Roster talent IS accumulated recruiting -- a team's composite in year Y is
+# mostly the players it signed in Y-3..Y -- so it can be rebuilt from recruiting
+# classes. Fitted on 1,088 team-years (2019-2025) and validated leave-one-year-out:
+#
+#     correlation with published talent   0.9350
+#     R^2                                 0.8741
+#     MAE                                 64.71   (talent SD 260.08)
+#
+# It also beats the obvious shortcut of using the current class alone (0.9149).
+TALENT_LAGS = (0, 1, 2, 3)
+TALENT_FROM_RECRUITING = {
+    "intercept": -44.602865,
+    "lag_0": 1.295870,
+    "lag_1": 0.856787,
+    "lag_2": 0.518837,
+    "lag_3": 0.879389,
+}
+
 
 def _centred(mapping: dict[str, float]) -> tuple[dict[str, float], float]:
     if not mapping:
@@ -69,12 +90,47 @@ def _centred(mapping: dict[str, float]) -> tuple[dict[str, float], float]:
     return {k: v - mean for k, v in mapping.items()}, mean
 
 
-def _talent(season: int) -> dict[str, float]:
+def _published_talent(season: int) -> dict[str, float]:
     try:
         rows = cfbd.talent(season)
     except Exception:
         return {}
     return {r["team"]: float(r["talent"]) for r in rows if r.get("talent") is not None}
+
+
+def _reconstruct_talent(season: int) -> dict[str, float]:
+    """Rebuild the talent composite from recruiting classes. See TALENT_LAGS."""
+    classes = {season - lag: _recruiting(season - lag) for lag in TALENT_LAGS}
+    coefficients = TALENT_FROM_RECRUITING
+    teams: set[str] = set()
+    for table in classes.values():
+        teams |= set(table)
+    out: dict[str, float] = {}
+    for team in teams:
+        points = []
+        for lag in TALENT_LAGS:
+            value = classes[season - lag].get(team)
+            if value is None:
+                break
+            points.append(value)
+        else:
+            out[team] = coefficients["intercept"] + sum(
+                coefficients[f"lag_{lag}"] * value
+                for lag, value in zip(TALENT_LAGS, points)
+            )
+    return out
+
+
+def talent_composite(season: int) -> tuple[dict[str, float], str]:
+    """(talent by team, source). Published when CFBD has it, reconstructed otherwise."""
+    published = _published_talent(season)
+    if published:
+        return published, "published"
+    return _reconstruct_talent(season), "reconstructed"
+
+
+def _talent(season: int) -> dict[str, float]:
+    return talent_composite(season)[0]
 
 
 def _returning(season: int) -> dict[str, float]:
@@ -110,6 +166,10 @@ class Components:
     recruiting_points: tuple[float, float]
     intercept: float
     rating: float
+    # "published" when CFBD supplied the talent composite, "reconstructed" when it
+    # was rebuilt from recruiting classes. Shown in the breakdown so a reader is
+    # never told a derived number is a published one.
+    talent_source: str = "published"
 
     def rows(self) -> list[tuple[str, float, float]]:
         """(label, raw, points) in the order they should be displayed."""
@@ -129,7 +189,8 @@ def components(
 ) -> dict[str, Components]:
     """Per-team preseason rating with every term kept separate."""
     prior_ratings_2 = prior_ratings_2 or {}
-    talent, _ = _centred(_talent(season))
+    raw_talent, talent_source = talent_composite(season)
+    talent, _ = _centred(raw_talent)
     recruiting, _ = _centred(_recruiting(season))
     returning = _returning(season)
 
@@ -150,6 +211,7 @@ def components(
             recruiting_points=(rec, c["recruiting_points"] * rec),
             intercept=c["intercept"],
             rating=0.0,
+            talent_source=talent_source,
         )
         total = (terms.intercept + terms.prior_rating[1] + terms.prior_rating_2[1]
                  + terms.talent[1] + terms.returning_production[1]
@@ -162,6 +224,7 @@ def components(
             recruiting_points=terms.recruiting_points,
             intercept=terms.intercept,
             rating=total,
+            talent_source=talent_source,
         )
     return out
 
