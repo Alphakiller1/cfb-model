@@ -97,7 +97,12 @@ def get(path: str, *, cacheable: bool = True) -> list | dict:
     else:
         raise CFBDError(f"CFBD request failed after {RETRIES} attempts: {path} ({last})")
 
-    if cacheable:
+    # Never cache an empty response. A feed that has not published yet returns
+    # [], and caching that forever silently pins the model to "no data" long
+    # after the data arrives -- which is exactly what happened to the 2026 talent
+    # composite: an empty reply was cached, CFBD published 138 teams days later,
+    # and only the uncached CI build ever saw them.
+    if cacheable and data:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         _cache_path(path).write_text(json.dumps(data), encoding="utf-8")
     return data
@@ -187,13 +192,17 @@ def ppa_teams(season: int, *, through_week: int) -> list[dict]:
 
 # ── Season-level priors (legitimately known before kickoff) ──────────────────
 def talent(season: int) -> list[dict]:
-    """Recruiting talent composite. Known before the season starts."""
-    return get(f"/talent?year={season}")
+    """Recruiting talent composite. Known before the season starts.
+
+    Published progressively during the offseason, so the current season is not
+    cached -- see the empty-response guard in `get`.
+    """
+    return get(f"/talent?year={season}", cacheable=_season_is_closed(season))
 
 
 def returning_production(season: int) -> list[dict]:
     """Returning production. Known before the season starts."""
-    return get(f"/player/returning?year={season}")
+    return get(f"/player/returning?year={season}", cacheable=_season_is_closed(season))
 
 
 def portal(season: int) -> list[dict]:
