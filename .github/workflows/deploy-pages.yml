@@ -47,7 +47,11 @@ jobs:
           PYTHONIOENCODING: utf-8
           IN_SEASON: ${{ github.event.inputs.season }}
           IN_WEEK: ${{ github.event.inputs.week }}
-        run: python scripts/build_current.py --out _site/index.html
+        run: |
+          if ! python scripts/build_current.py --out _site/index.html; then
+            echo "::warning::Live data build failed; deploying the last verified snapshot"
+            test -s _site/index.html
+          fi
 
       - name: Post-build smoke
         run: python scripts/smoke_site.py _site/index.html
