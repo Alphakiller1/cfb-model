@@ -12,7 +12,7 @@ from pathlib import Path
 
 from cfbmodel import forecast as fc
 from cfbmodel import calibration, coaching, efficiency, export, fitting, matrix
-from cfbmodel import conferences, preseason, ratings, roster, site, teams
+from cfbmodel import conferences, preseason, ratings, roster, site, teams, totals
 from cfbmodel.authority import current
 from cfbmodel.sources import cfbd
 
@@ -53,6 +53,13 @@ def build_ratings(season: int, week: int) -> dict[str, float]:
     current_rows = [g for g in cfbd.games(season, completed_only=True) if g["week"] < week]
     live = ratings.build(_to_games(current_rows))
     return preseason.blend(prior, live, week)
+
+
+def _preseason_totals(season: int) -> totals.PreseasonContext | None:
+    """Previous-season scoring context, known before the current season starts."""
+    prior = _prior_season(season)
+    games = _to_games(cfbd.games(prior, completed_only=True))
+    return totals.preseason_context(games)
 
 
 def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
@@ -123,6 +130,7 @@ def cmd_board(args: argparse.Namespace) -> int:
     forms = _forms(args.season, args.week)
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
+    preseason_totals = _preseason_totals(args.season)
     slate = [g for g in cfbd.games(args.season, week=args.week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
     if not slate:
@@ -138,6 +146,7 @@ def cmd_board(args: argparse.Namespace) -> int:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_tot.get((home, away)),
+            preseason_total=totals.preseason_total(home, away, preseason_totals),
             authority=auth,
             week=args.week,
         )
@@ -172,7 +181,7 @@ def cmd_board(args: argparse.Namespace) -> int:
             edge = "  --"
         if f.projected_home_score is not None:
             score = f"{f.projected_away_score:.0f}-{f.projected_home_score:.0f}"
-            star = "" if f.total_modelled else "*"
+            star = "*" if f.total_basis == "league_mean_fallback" else ""
             score = f"{score}{star}"
         else:
             score = "--"
@@ -186,7 +195,7 @@ def cmd_board(args: argparse.Namespace) -> int:
         print(f"  {when[:22]:<22} {matchup[:40]:<40} {score:>13} {tot:>12} {model:>7} {mkt:>7} {edge:>9}  {f.action.value}{flag}")
     print(f"\n  {len(rows)} games · score is the MODEL projection (away-home), "
           f"total column is model/market")
-    print(f"  (parenthesised) = information gap, not an edge · * = league-mean total, no form yet · "
+    print(f"  (parenthesised) = information gap, not an edge · * = emergency league-mean fallback · "
           f"published margin equals the market at lam=0\n")
     return 0
 
@@ -200,6 +209,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     forms = _forms(args.season, args.week)
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
+    preseason_totals = _preseason_totals(args.season)
     try:
         from cfbmodel.sources import oddsapi
         from cfbmodel import teams as teams_mod
@@ -221,6 +231,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_tot.get((home, away)),
+            preseason_total=totals.preseason_total(home, away, preseason_totals),
             book=book_lines.get((home, away)),
             authority=auth, week=args.week,
         )

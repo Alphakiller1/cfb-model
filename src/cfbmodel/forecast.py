@@ -78,6 +78,7 @@ class Forecast:
     projected_home_score: float | None = None
     projected_away_score: float | None = None
     total_modelled: bool = False
+    total_basis: str = "league_mean_fallback"
     market_total: float | None = None
     # Live sportsbook line, distinct from the CFBD consensus used as the model's
     # benchmark. Present only when an odds feed is configured and matched.
@@ -166,6 +167,7 @@ def game(
     week: int | None = None,
     market_total: float | None = None,
     book: object | None = None,
+    preseason_total: float | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -191,7 +193,9 @@ def game(
     # the market -- a "projected score" that silently restated the market's
     # number would be the market's projection wearing the model's label. The
     # board shows the market columns alongside it, so the two stay comparable.
-    projection = totals.project(model_margin, home_form, away_form)
+    projection = totals.project(
+        model_margin, home_form, away_form, preseason=preseason_total
+    )
     return Forecast(
         home=home, away=away, neutral=neutral,
         model_margin=model_margin, market_margin=market_margin,
@@ -207,6 +211,7 @@ def game(
         projected_home_score=projection.home_score,
         projected_away_score=projection.away_score,
         total_modelled=projection.modelled,
+        total_basis=projection.basis,
         market_total=market_total,
         book_name=getattr(book, "book_title", None),
         book_margin=getattr(book, "home_margin", None),

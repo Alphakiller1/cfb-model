@@ -1,6 +1,6 @@
 import pytest
 
-from cfbmodel import matrix, totals
+from cfbmodel import matrix, ratings, totals
 
 
 def _form(**kw):
@@ -58,6 +58,47 @@ def test_missing_form_falls_back_to_the_league_mean():
     assert p.total == pytest.approx(totals.LEAGUE_MEAN_TOTAL)
     assert p.modelled is False
     assert p.home_score - p.away_score == pytest.approx(7.0)
+    assert p.basis == "league_mean_fallback"
+
+
+def _prior_games():
+    scoring = {"A": 38, "B": 32, "C": 20, "D": 16}
+    games = []
+    week = 1
+    for _ in range(2):
+        for home, away in (("A", "B"), ("A", "C"), ("A", "D"),
+                           ("B", "C"), ("B", "D"), ("C", "D")):
+            games.append(ratings.Game(
+                week=week, home=home, away=away,
+                home_points=scoring[home], away_points=scoring[away],
+                neutral=False, home_is_fbs=True, away_is_fbs=True,
+            ))
+            week += 1
+    return games
+
+
+def test_preseason_total_is_matchup_specific():
+    context = totals.preseason_context(_prior_games())
+    high = totals.preseason_total("A", "B", context)
+    low = totals.preseason_total("C", "D", context)
+    assert high > low
+    assert high != pytest.approx(totals.LEAGUE_MEAN_TOTAL)
+
+
+def test_preseason_total_replaces_constant_when_current_form_is_missing():
+    context = totals.preseason_context(_prior_games())
+    prior = totals.preseason_total("A", "C", context)
+    projection = totals.project(7.0, None, None, preseason=prior)
+    assert projection.total == pytest.approx(prior)
+    assert projection.modelled is True
+    assert projection.basis == "preseason_scoring_prior"
+
+
+def test_unknown_preseason_team_is_shrunk_to_league_average():
+    context = totals.preseason_context(_prior_games())
+    known = totals.preseason_total("A", "New FBS", context)
+    assert known is not None
+    assert 20 < known < 90
 
 
 def test_modelled_flag_is_true_with_real_form():

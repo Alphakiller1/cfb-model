@@ -32,9 +32,15 @@ centre of mass, not a prediction of the actual score.
 
 from __future__ import annotations
 
+import statistics
+from collections import defaultdict
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from cfbmodel import matrix
+
+if TYPE_CHECKING:
+    from cfbmodel.ratings import Game
 
 # Fitted on 3,256 out-of-sample games, opponent-adjusted features plus pace.
 COEFFICIENTS: dict[str, float] = {
@@ -57,6 +63,18 @@ TOTAL_SD = 16.36
 # League mean total, the fallback when a matchup cannot be modelled.
 LEAGUE_MEAN_TOTAL = 52.45
 
+# Week 1-4 estimator fitted on 1,191 point-in-time FBS-vs-FBS games from
+# 2019 and 2021-2025. Each feature uses only the previous completed season.
+# Leave-one-season-out MAE improved from 13.3942 for a constant total to
+# 13.2209. The modest coefficients are deliberate carryover shrinkage: roster
+# churn makes last year's scoring informative, but nowhere near fully persistent.
+PRESEASON_COEFFICIENTS: dict[str, float] = {
+    "intercept": 54.082055,
+    "offense_sum": 0.255660,
+    "defense_sum": 0.267813,
+}
+PRESEASON_MIN_GAMES = 5
+
 _EFFICIENCY = ("ppa", "successRate", "explosiveness", "stuffRate")
 _PACE = ("drives", "plays")
 
@@ -67,6 +85,76 @@ class Projection:
     home_score: float | None
     away_score: float | None
     modelled: bool          # False when the total fell back to the league mean
+    basis: str = "league_mean_fallback"
+
+
+@dataclass(frozen=True)
+class ScoringProfile:
+    points_for: float
+    points_allowed: float
+    games: int
+
+
+@dataclass(frozen=True)
+class PreseasonContext:
+    profiles: dict[str, ScoringProfile]
+    league_team_points: float
+
+
+def preseason_context(games: list[Game]) -> PreseasonContext | None:
+    """Build scoring priors from a fully completed previous season.
+
+    Only FBS-vs-FBS games enter the profile, matching the slate being forecast.
+    A five-game minimum prevents a partial/transition season from masquerading
+    as a stable team scoring level.
+    """
+    accumulator: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    for game in games:
+        if not (game.home_is_fbs and game.away_is_fbs):
+            continue
+        accumulator[game.home][0] += game.home_points
+        accumulator[game.home][1] += game.away_points
+        accumulator[game.home][2] += 1
+        accumulator[game.away][0] += game.away_points
+        accumulator[game.away][1] += game.home_points
+        accumulator[game.away][2] += 1
+    profiles = {
+        team: ScoringProfile(points_for / games_played,
+                             points_allowed / games_played,
+                             int(games_played))
+        for team, (points_for, points_allowed, games_played) in accumulator.items()
+        if games_played >= PRESEASON_MIN_GAMES
+    }
+    if not profiles:
+        return None
+    league_team_points = statistics.fmean(
+        profile.points_for for profile in profiles.values()
+    )
+    return PreseasonContext(profiles, league_team_points)
+
+
+def preseason_total(home: str, away: str,
+                    context: PreseasonContext | None) -> float | None:
+    """Matchup-specific early-season total from prior scoring and allowance.
+
+    A promoted/new FBS team without a usable history is treated as league
+    average for the missing side, rather than forcing the entire slate back to
+    one constant. The returned value remains a preseason prior, not current form.
+    """
+    if context is None:
+        return None
+    mean = context.league_team_points
+    home_profile = context.profiles.get(home)
+    away_profile = context.profiles.get(away)
+    home_for = home_profile.points_for if home_profile else mean
+    away_for = away_profile.points_for if away_profile else mean
+    home_allowed = home_profile.points_allowed if home_profile else mean
+    away_allowed = away_profile.points_allowed if away_profile else mean
+    offense_sum = home_for + away_for - 2.0 * mean
+    defense_sum = home_allowed + away_allowed - 2.0 * mean
+    c = PRESEASON_COEFFICIENTS
+    return (c["intercept"] + c["offense_sum"] * offense_sum
+            + c["defense_sum"] * defense_sum)
 
 
 def _pace_complete(form: matrix.TeamForm) -> bool:
@@ -93,6 +181,8 @@ def project(
     margin: float | None,
     home: matrix.TeamForm | None,
     away: matrix.TeamForm | None,
+    *,
+    preseason: float | None = None,
 ) -> Projection:
     """Turn a margin plus both teams' form into a projected scoreline.
 
@@ -101,12 +191,19 @@ def project(
     blank, and `modelled` marks which one the caller got.
     """
     if margin is None:
-        return Projection(None, None, None, False)
+        return Projection(None, None, None, False, "unavailable")
 
     total = None
     if home is not None and away is not None:
         total = total_points(home, away)
-    modelled = total is not None
+    if total is not None:
+        basis = "in_season_form"
+    elif preseason is not None:
+        total = preseason
+        basis = "preseason_scoring_prior"
+    else:
+        basis = "league_mean_fallback"
+    modelled = basis != "league_mean_fallback"
     if total is None:
         total = LEAGUE_MEAN_TOTAL
 
@@ -118,4 +215,4 @@ def project(
         away_score, home_score = 0.0, total
     elif home_score < 0:
         home_score, away_score = 0.0, total
-    return Projection(total, home_score, away_score, modelled)
+    return Projection(total, home_score, away_score, modelled, basis)

@@ -38,7 +38,7 @@ from cfbmodel import ratings as ratings_mod
 from cfbmodel import teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -76,6 +76,7 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         # A league-mean total is not a projection; the engine needs to be able
         # to mark a scoreline built on one rather than print it as modelled.
         "total_modelled": forecast.total_modelled,
+        "total_basis": forecast.total_basis,
         "used_efficiency": forecast.used_efficiency,
         "in_validated_regime": forecast.in_validated_regime,
         "action": forecast.action.value,

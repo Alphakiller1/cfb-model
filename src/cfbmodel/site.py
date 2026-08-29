@@ -254,7 +254,11 @@ def _projection_rows(row: Row, season: int) -> str:
     if f.model_margin is not None:
         out.append(_bd_row("Model margin", None, None, f.model_margin, kind="bd-row--total"))
     if f.projected_total is not None:
-        label = "Projected total" + ("" if f.total_modelled else " (league mean)")
+        basis_label = {
+            "preseason_scoring_prior": " (preseason scoring prior)",
+            "league_mean_fallback": " (emergency league mean)",
+        }.get(f.total_basis, "")
+        label = "Projected total" + basis_label
         out.append(
             f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
@@ -409,13 +413,15 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
         "BET": "badge-bet", "MONITOR": "badge-monitor",
         "REVIEW": "badge-review", "AVOID": "badge-avoid",
     }.get(f.action.value, "badge-avoid")
-    # A league-mean fallback total is marked so a scoreline built on it is not
-    # read as a modelled projection.
-    total_star = "" if f.total_modelled else "*"
+    # Only the emergency constant is starred. A preseason total is matchup-specific
+    # and fitted, but its subtitle still says it is a prior rather than current form.
+    total_star = "*" if f.total_basis == "league_mean_fallback" else ""
     if f.market_total is not None:
         total_sub = f"mkt {f.market_total:.1f}"
-    elif not f.total_modelled:
-        total_sub = "league mean"
+    elif f.total_basis == "preseason_scoring_prior":
+        total_sub = "preseason prior"
+    elif f.total_basis == "league_mean_fallback":
+        total_sub = "emergency mean"
     else:
         total_sub = ""
     gap_sub = ('<span class="gn-sub">not an edge</span>'
@@ -592,7 +598,9 @@ drives and plays per game. CFB tempo varies far more than the NFL&rsquo;s.</p>
 <tr><td>Total residual SD</td><td>{totals.TOTAL_SD:.2f}</td></tr></table>
 <p>Scores are algebra on the two projections: home = (total + margin) / 2. They inherit
 the error of <em>both</em> models, so read a scoreline as a centre of mass, not a
-prediction. A total marked <b>*</b> is the league mean, not a modelled figure.</p></div>
+prediction. Weeks 1–4 use a separately fitted prior from each team&rsquo;s previous-season
+scoring and defensive allowance. A total marked <b>*</b> is only the emergency league-mean
+fallback, not a modelled figure.</p></div>
 
 <div class="mth-card"><div class="mth-h">Point-in-time</div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
@@ -718,6 +726,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     except Exception:
         comps = None
     forms = cli._forms(season, week)
+    preseason_totals = cli._preseason_totals(season)
     market = cli._market(season, week)
     market_total = cli._market_totals(season, week)
     # Live sportsbook lines are optional: no key, no quota, or no match simply
@@ -739,6 +748,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_total.get((home, away)),
+            preseason_total=totals.preseason_total(home, away, preseason_totals),
             book=book_lines.get((home, away)),
             authority=authority, week=week,
         )
