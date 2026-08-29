@@ -92,3 +92,19 @@ def test_unknown_book_is_still_used_rather_than_dropped():
 
 def test_no_bookmakers_yields_none():
     assert oddsapi._pick_book([]) is None
+
+
+def test_bookmaker_env_locks_the_api_request(monkeypatch):
+    captured = {}
+
+    monkeypatch.setenv("ODDS_BOOKMAKERS", "fanduel")
+    monkeypatch.setattr(oddsapi, "remaining", lambda: 100)
+
+    def fake_get(path, params):
+        captured.update(params)
+        return [], {}
+
+    monkeypatch.setattr(oddsapi, "_get", fake_get)
+
+    assert oddsapi.fetch_lines(META) == {}
+    assert captured["bookmakers"] == "fanduel"

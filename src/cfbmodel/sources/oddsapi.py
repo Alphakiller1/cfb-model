@@ -204,11 +204,19 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] = PREFERRED_BOOKS,
     if left is not None and left < min_remaining:
         raise QuotaExhausted(f"only {left} Odds API credits left (floor {min_remaining})")
 
-    data, _ = _get(f"/sports/{SPORT}/odds", {
+    requested = tuple(
+        book.strip().lower()
+        for book in os.getenv("ODDS_BOOKMAKERS", "").split(",")
+        if book.strip()
+    )
+    query = {
         "regions": "us,us2",
         "markets": "spreads,totals",
         "oddsFormat": "american",
-    })
+    }
+    if requested:
+        query["bookmakers"] = ",".join(requested)
+    data, _ = _get(f"/sports/{SPORT}/odds", query)
     index = build_index(team_meta)
     out: dict[tuple[str, str], BookLine] = {}
     for event in data:

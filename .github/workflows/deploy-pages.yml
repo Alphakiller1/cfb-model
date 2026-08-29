@@ -43,6 +43,7 @@ jobs:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           # Optional: without it the board still builds, just without a live book row.
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_BOOKMAKERS: fanduel
           PYTHONIOENCODING: utf-8
           IN_SEASON: ${{ github.event.inputs.season }}
           IN_WEEK: ${{ github.event.inputs.week }}
