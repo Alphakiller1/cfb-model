@@ -253,6 +253,10 @@ def _projection_rows(row: Row, season: int) -> str:
     out = [_bd_section("Projection")]
     if f.model_margin is not None:
         out.append(_bd_row("Model margin", None, None, f.model_margin, kind="bd-row--total"))
+    if (f.raw_model_margin is not None and f.model_margin is not None
+            and f.raw_model_margin != f.model_margin):
+        out.append(_bd_row("Raw preseason prior", None, None,
+                           f.raw_model_margin, kind="bd-row--total"))
     if f.projected_total is not None:
         basis_label = {
             "preseason_scoring_prior": " (preseason scoring prior)",

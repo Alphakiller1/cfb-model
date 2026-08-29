@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cfbmodel import matrix, ratings, totals
+from cfbmodel import calibration, matrix, ratings, totals
 from cfbmodel.authority import Action, Authority, current
 
 # Fraction of model-vs-market disagreement retained. See module docstring.
@@ -54,6 +54,7 @@ class Forecast:
     home: str
     away: str
     neutral: bool
+    raw_model_margin: float | None
     model_margin: float | None
     market_margin: float | None
     margin: float | None
@@ -175,9 +176,17 @@ def game(
 
     base = ratings.projected_margin(team_ratings, home, away, neutral=neutral)
     if base is None:
-        model_margin, used_efficiency = None, False
+        raw_model_margin, used_efficiency = None, False
     else:
-        model_margin, used_efficiency = _model_margin(base, home_form, away_form)
+        raw_model_margin, used_efficiency = _model_margin(base, home_form, away_form)
+
+    # Week 1 is a distinct, historically under-dispersed regime. Apply only the
+    # correction measured on held-out Week 1 seasons; never stretch later weeks
+    # or the full efficiency model by analogy.
+    if week == 1 and not used_efficiency:
+        model_margin = calibration.WEEK1.apply(raw_model_margin)
+    else:
+        model_margin = raw_model_margin
 
     if market_margin is None:
         published, anchored, market_gap = model_margin, False, None
@@ -198,6 +207,7 @@ def game(
     )
     return Forecast(
         home=home, away=away, neutral=neutral,
+        raw_model_margin=raw_model_margin,
         model_margin=model_margin, market_margin=market_margin,
         margin=published, win_probability=win_p, edge_points=edge,
         market_gap=market_gap,

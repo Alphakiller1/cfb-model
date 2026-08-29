@@ -76,6 +76,18 @@ def test_early_weeks_are_flagged_out_of_regime():
     assert f.in_validated_regime is False
 
 
+def test_week_one_applies_held_out_scale_calibration():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, week=1)
+    raw = RATINGS["A"] - RATINGS["B"] + 4.53 + fc.RATING_BIAS_CORRECTION
+    assert f.raw_model_margin == pytest.approx(raw)
+    assert f.model_margin == pytest.approx(1.7236 + 1.5333 * raw)
+
+
+def test_week_two_does_not_inherit_week_one_calibration():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, week=2)
+    assert f.model_margin == pytest.approx(f.raw_model_margin)
+
+
 def test_mid_season_is_in_regime():
     f = fc.game(home="A", away="B", team_ratings=RATINGS, week=10)
     assert f.in_validated_regime is True

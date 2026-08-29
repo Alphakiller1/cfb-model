@@ -7,15 +7,16 @@ calibration, so optimising MAE alone drives the model toward under-dispersion �
 and an under-dispersed margin lands on the market underdog every time the price
 is wide, which reads as a systematic opinion the model does not hold.
 
-The measured position (2026-08-27), which is why this module exists:
+The measured position (updated 2026-08-29), which is why this module exists:
 
     weeks 5+ (validated regime)   model SD 12.16 vs market 12.67   ratio 0.96
-    week 1  (preseason path)      model SD  8.05 vs market 15.18   ratio 0.53
+    week 1  (preseason path)      raw model SD 9.61 vs market 16.00 ratio 0.60
 
-The in-regime path is fine. The compression is confined to the ratings-only
-preseason path, and on a 49-game week-1 board it produced a model-on-market
-regression slope of 0.478: the model landed on the underdog in 43 of 49 games
-and in 100% of games priced above a touchdown.
+The in-regime path is fine. Compression is most severe in Week 1. A six-season
+leave-one-season-out audit found that an affine Week 1 correction lowered MAE
+from 14.4109 to 12.8499 and reduced the underdog-side rate from 86.8% to 60.5%.
+The market remained better at 11.7838, so the correction improves the raw point
+estimate without turning its market difference into an edge.
 
 **Under-dispersion is not automatically a defect.** A conditional mean shrinks
 when it conditions on less, and that is correct behaviour — the market is itself
@@ -25,19 +26,20 @@ information the market has before kickoff and the model does not — transfer
 portal, quarterback specifically rather than blended returning production,
 coaching changes, availability.
 
-So this module deliberately does **not** ship a fitted expansion. Two reasons:
+So this module ships the held-out Week 1 affine calibration, but does not apply
+an indiscriminate expansion to other regimes or authorize its residual as an
+edge. Two constraints remain:
 
-1. `reports/BASELINE_2019_2025.md` already rejected expansion, monotonically, on
-   MAE (12.9749 at α=0 rising to 13.6962 at α=1). Any recalibration will cost
-   MAE. That is expected and is not by itself a reason to refuse it — but it
-   does mean the decision belongs to a gate record, not to a default.
-2. Inflating a point estimate to match a better-informed one manufactures
-   confidence the model has not earned. The honest fixes are to close the
-   information gap and to stop calling the residual an edge.
+1. The earlier inverse-cap expansion was rejected monotonically on MAE (12.9749
+   at alpha=0 rising to 13.6962 at alpha=1). That was a different, global
+   transformation. The adopted Week 1 affine correction cleared held-out MAE;
+   no result is generalized beyond the regime where it was measured.
+2. The Week 1 correction still trails the market and therefore cannot establish
+   a bettable disagreement. The honest next fix is closing the information gap.
 
-`fit` is here so the number can be *measured* against outcomes rather than
-argued about, and `PRESEASON` stays identity until someone runs it and records
-what they found.
+`fit` is here so every calibration is measured against outcomes rather than
+argued about. `WEEK1` carries the recorded result; later preseason weeks remain
+identity until separately validated.
 """
 
 from __future__ import annotations
@@ -72,9 +74,21 @@ class Calibration:
         return self.intercept + self.slope * predicted
 
 
-# Applied to the ratings-only/preseason path. Identity until fitted; see the
-# module docstring for why that default is deliberate rather than a TODO.
-# Fit it with `python -m cfbmodel.cli calibrate --seasons 2019,2021-2025`.
+# Weeks 2-4 remain identity. Week 1 is materially different: it contains the
+# season's largest talent mismatches and no current-season observations. On 282
+# FBS-vs-FBS Week 1 games (2019, 2021-2025), leave-one-season-out affine
+# calibration reduced MAE from 14.4109 to 12.8499 and the underdog-side rate
+# versus the closing market from 86.8% to 60.5%. The slope was stable across
+# folds (1.5333 +/- 0.0466). It still trails the market's 11.7838 MAE, so this
+# corrects the independent point estimate but does not authorize an edge.
+WEEK1 = Calibration(
+    intercept=1.7236,
+    slope=1.5333,
+    provenance="LOSO 282 Week 1 FBS-vs-FBS games, 2019 and 2021-2025",
+)
+
+# Applied to ratings-only weeks other than Week 1. Identity until separately
+# fitted and validated.
 PRESEASON = Calibration()
 
 # The full-regime path is an OLS fit and is scale-calibrated by construction on

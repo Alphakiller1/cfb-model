@@ -325,9 +325,9 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
               f"slope={fitted.slope:.4f},")
         print(f"                provenance=\"{fitted.provenance}\")")
         print()
-        print("  Adopting it is a claim about evidence: it will cost MAE (see")
-        print("  reports/BASELINE_2019_2025.md) and belongs in a commit with these")
-        print("  numbers beside it, not in a config tweak.")
+        print("  Adopting it is a claim about evidence: score it leave-one-season-out")
+        print("  within the same regime and record both MAE and side bias in")
+        print("  reports/BASELINE_2019_2025.md before changing a shipped coefficient.")
     return 0
 
 

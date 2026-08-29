@@ -81,14 +81,15 @@ graphic showing the top 40 grades them against the league rather than against ea
 
 ## Why the board shows no edge before week 5
 
-The model used to land on the market underdog in 43 of 49 week-1 games, and in
-**every** game priced above a touchdown. That was not an opinion — it was scale.
-Measured dispersion against the market is **0.96** in the validated regime and
-**0.53** in week 1, and the gap between those two numbers is information the
-price has before kickoff that the model does not: transfer portal, quarterback
-specifically rather than blended returning production, coaching changes,
-availability. A conditional mean shrinks when it conditions on less, and that is
-correct behaviour.
+The raw model landed on the market underdog in 86.8% of 282 historical Week 1
+games. A leave-one-season-out affine correction reduced MAE from **14.4109 to
+12.8499** and the underdog-side rate to **60.5%**; its slope was stable across
+folds at 1.5333 ± 0.0466. The displayed Week 1 model margin now applies that
+correction and retains the raw prior in the export and breakdown for audit.
+
+The market still scored better at **11.7838 MAE**. The remaining gap is
+information the price has before kickoff that the model does not: transfer
+portal detail, quarterback availability, coaching changes, and late roster news.
 
 So the difference is still published, as `market_gap`, and it is no longer called
 an edge: `edge_points` is `None` outside the validated regime and
