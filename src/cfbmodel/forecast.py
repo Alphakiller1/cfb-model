@@ -78,7 +78,7 @@ class Forecast:
     projected_home_score: float | None = None
     projected_away_score: float | None = None
     total_modelled: bool = False
-    total_basis: str = "league_mean_fallback"
+    total_basis: str = "unavailable"
     market_total: float | None = None
     # Live sportsbook line, distinct from the CFBD consensus used as the model's
     # benchmark. Present only when an odds feed is configured and matched.

@@ -181,7 +181,7 @@ def cmd_board(args: argparse.Namespace) -> int:
             edge = "  --"
         if f.projected_home_score is not None:
             score = f"{f.projected_away_score:.0f}-{f.projected_home_score:.0f}"
-            star = "*" if f.total_basis == "league_mean_fallback" else ""
+            star = ""
             score = f"{score}{star}"
         else:
             score = "--"

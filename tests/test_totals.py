@@ -52,13 +52,11 @@ def test_scores_are_none_without_a_margin():
     assert (p.total, p.home_score, p.away_score) == (None, None, None)
 
 
-def test_missing_form_falls_back_to_the_league_mean():
-    """A centred guess beats a blank, but the caller must be able to tell."""
+def test_missing_form_and_prior_abstains_instead_of_using_a_constant():
     p = totals.project(7.0, None, None)
-    assert p.total == pytest.approx(totals.LEAGUE_MEAN_TOTAL)
+    assert (p.total, p.home_score, p.away_score) == (None, None, None)
     assert p.modelled is False
-    assert p.home_score - p.away_score == pytest.approx(7.0)
-    assert p.basis == "league_mean_fallback"
+    assert p.basis == "unavailable"
 
 
 def _prior_games():
@@ -82,7 +80,7 @@ def test_preseason_total_is_matchup_specific():
     high = totals.preseason_total("A", "B", context)
     low = totals.preseason_total("C", "D", context)
     assert high > low
-    assert high != pytest.approx(totals.LEAGUE_MEAN_TOTAL)
+    assert high != pytest.approx(low)
 
 
 def test_preseason_total_replaces_constant_when_current_form_is_missing():
@@ -107,7 +105,7 @@ def test_modelled_flag_is_true_with_real_form():
 
 def test_scores_never_go_negative():
     """A huge margin against a modest total would otherwise produce one."""
-    p = totals.project(90.0, None, None)
+    p = totals.project(90.0, _form(), _form())
     assert p.away_score >= 0
     assert p.home_score >= 0
 

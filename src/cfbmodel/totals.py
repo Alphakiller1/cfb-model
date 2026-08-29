@@ -60,9 +60,6 @@ COEFFICIENTS: dict[str, float] = {
 # Residual SD of the total, used to express uncertainty honestly.
 TOTAL_SD = 16.36
 
-# League mean total, the fallback when a matchup cannot be modelled.
-LEAGUE_MEAN_TOTAL = 52.45
-
 # Week 1-4 estimator fitted on 1,191 point-in-time FBS-vs-FBS games from
 # 2019 and 2021-2025. Each feature uses only the previous completed season.
 # Leave-one-season-out MAE improved from 13.3942 for a constant total to
@@ -84,8 +81,8 @@ class Projection:
     total: float | None
     home_score: float | None
     away_score: float | None
-    modelled: bool          # False when the total fell back to the league mean
-    basis: str = "league_mean_fallback"
+    modelled: bool
+    basis: str = "unavailable"
 
 
 @dataclass(frozen=True)
@@ -186,9 +183,9 @@ def project(
 ) -> Projection:
     """Turn a margin plus both teams' form into a projected scoreline.
 
-    With no usable form the total falls back to the league mean rather than
-    refusing to produce a scoreline -- a centred guess is more useful than a
-    blank, and `modelled` marks which one the caller got.
+    If neither current form nor a matchup-specific preseason prior is usable,
+    abstain. A fixed league-average substitute would manufacture the same total
+    for unrelated matchups and falsely imply information the model does not have.
     """
     if margin is None:
         return Projection(None, None, None, False, "unavailable")
@@ -202,10 +199,8 @@ def project(
         total = preseason
         basis = "preseason_scoring_prior"
     else:
-        basis = "league_mean_fallback"
-    modelled = basis != "league_mean_fallback"
-    if total is None:
-        total = LEAGUE_MEAN_TOTAL
+        return Projection(None, None, None, False, "unavailable")
+    modelled = True
 
     # Scores cannot be negative; a huge projected margin against a modest total
     # would otherwise produce one.

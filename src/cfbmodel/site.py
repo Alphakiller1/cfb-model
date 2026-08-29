@@ -256,7 +256,6 @@ def _projection_rows(row: Row, season: int) -> str:
     if f.projected_total is not None:
         basis_label = {
             "preseason_scoring_prior": " (preseason scoring prior)",
-            "league_mean_fallback": " (emergency league mean)",
         }.get(f.total_basis, "")
         label = "Projected total" + basis_label
         out.append(
@@ -413,15 +412,11 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
         "BET": "badge-bet", "MONITOR": "badge-monitor",
         "REVIEW": "badge-review", "AVOID": "badge-avoid",
     }.get(f.action.value, "badge-avoid")
-    # Only the emergency constant is starred. A preseason total is matchup-specific
-    # and fitted, but its subtitle still says it is a prior rather than current form.
-    total_star = "*" if f.total_basis == "league_mean_fallback" else ""
+    total_star = ""
     if f.market_total is not None:
         total_sub = f"mkt {f.market_total:.1f}"
     elif f.total_basis == "preseason_scoring_prior":
         total_sub = "preseason prior"
-    elif f.total_basis == "league_mean_fallback":
-        total_sub = "emergency mean"
     else:
         total_sub = ""
     gap_sub = ('<span class="gn-sub">not an edge</span>'
