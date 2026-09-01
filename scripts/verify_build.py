@@ -40,7 +40,9 @@ def verify(path: Path) -> list[str]:
         failed = [row["path"] for row in payload.get("cfbd", [])
                   if row.get("state") == "error"]
         if failed:
-            errors.append(f"{len(failed)} CFBD endpoint(s) failed")
+            errors.append(
+                f"{len(failed)} CFBD endpoint(s) failed: {', '.join(failed)}"
+            )
     return errors
 
 
@@ -49,11 +51,20 @@ def main() -> int:
     parser.add_argument("manifest", type=Path)
     args = parser.parse_args()
     errors = verify(args.manifest)
+    payload = json.loads(args.manifest.read_text(encoding="utf-8"))
+    odds = payload.get("odds") or {}
+    print(
+        "sportsbook diagnostic: "
+        f"book={odds.get('requested_book')} state={odds.get('state')} "
+        f"feed_events={odds.get('events')} feed_matched={odds.get('matched')} "
+        f"feed_unmatched={odds.get('unmatched')} "
+        f"slate={odds.get('slate_matched')}/{odds.get('slate_games')} "
+        f"credits_remaining={odds.get('remaining')}"
+    )
     if errors:
         for error in errors:
             print(f"[FAIL] {error}")
         return 1
-    payload = json.loads(args.manifest.read_text(encoding="utf-8"))
     odds = payload["odds"]
     print(
         f"verified {payload['season']} week {payload['week']}: "
