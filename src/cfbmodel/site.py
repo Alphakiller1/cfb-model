@@ -835,7 +835,12 @@ def build(*, season: int, week: int, out: Path) -> Path:
     preseason_totals = cli._preseason_totals(season)
     market_rows = cli.cfbd.lines(season, week=week)
     market, market_total = cli._markets(market_rows)
-    season_games = cli.cfbd.games(season)
+    # Fetch only weeks whose games can affect this build. The unbounded current-
+    # season endpoint has produced upstream 502s; week-scoped calls are smaller,
+    # point-in-time correct, and sufficient both for the slate and ledger grades.
+    season_games: list[dict] = []
+    for game_week in range(1, week + 1):
+        season_games.extend(cli.cfbd.games(season, week=game_week))
 
     # A missing quote is an explicit source state, not an empty dictionary that
     # looks indistinguishable from a successful refresh with no coverage.
@@ -905,6 +910,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     current_status = [status for status in endpoint_status
                       if str(season) in status["path"]]
     stale = [status for status in current_status if status.get("stale")]
+    failed = [status for status in current_status if status.get("state") == "error"]
     live_ages = [status["age_seconds"] for status in current_status
                  if status.get("age_seconds") is not None]
     odds_status = oddsapi.status_report()
@@ -916,6 +922,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     issues: list[str] = []
     if stale:
         issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
+    if failed:
+        issues.append(f"{len(failed)} CFBD endpoint(s) failed and supplied no current input")
     if odds_error:
         issues.append(f"Live sportsbook feed failed: {odds_error}")
     elif rows and matched_on_slate == 0:
@@ -941,7 +949,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "generated_at": generated_at.strftime("%Y-%m-%d %H:%M UTC"),
         "season": season,
         "week": week,
-        "cfbd_state": "fresh" if not stale else "bounded snapshot",
+        "cfbd_state": ("source error" if failed else
+                       "bounded snapshot" if stale else "fresh"),
         "cfbd_endpoint_count": len(current_status),
         "max_live_age_seconds": max(live_ages) if live_ages else None,
         "cfbd": endpoint_status,

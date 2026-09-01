@@ -67,7 +67,14 @@ def build_rating_bundle(season: int, week: int) -> RatingBundle:
     extra = preseason.roster_features(season)
     components = preseason.components(season, p1, p2, extra)
     prior = {team: component.rating for team, component in components.items()}
-    current_rows = [g for g in cfbd.games(season, completed_only=True) if g["week"] < week]
+    # Current-season full-year `/games` queries are large enough to return 502
+    # while the same week-scoped requests succeed. Only completed weeks can
+    # inform this forecast, so ask for exactly those weeks and no future slate.
+    current_rows: list[dict] = []
+    for completed_week in range(1, week):
+        current_rows.extend(cfbd.games(
+            season, week=completed_week, completed_only=True,
+        ))
     live = ratings.build(_to_games(current_rows))
     return RatingBundle(preseason.blend(prior, live, week), components, live)
 

@@ -37,6 +37,10 @@ def verify(path: Path) -> list[str]:
         stale = [row["path"] for row in payload.get("cfbd", []) if row.get("stale")]
         if stale:
             errors.append(f"{len(stale)} CFBD endpoint(s) are stale")
+        failed = [row["path"] for row in payload.get("cfbd", [])
+                  if row.get("state") == "error"]
+        if failed:
+            errors.append(f"{len(failed)} CFBD endpoint(s) failed")
     return errors
 
 

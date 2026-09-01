@@ -58,6 +58,7 @@ class FetchStatus:
 
 _MEMORY: dict[str, list | dict] = {}
 _STATUS: dict[str, FetchStatus] = {}
+_FAILURES: dict[str, str] = {}
 
 
 class CFBDError(RuntimeError):
@@ -128,6 +129,7 @@ def clear_run_state() -> None:
     """Clear process-local memoisation and provenance before a new build."""
     _MEMORY.clear()
     _STATUS.clear()
+    _FAILURES.clear()
 
 
 def status_report() -> list[dict]:
@@ -172,7 +174,8 @@ def _read_runtime(path: str, *, max_age: int) -> tuple[list | dict, str] | None:
 
 
 def get(path: str, *, cacheable: bool = True,
-        stale_if_error: int | None = None) -> list | dict:
+        stale_if_error: int | None = None, timeout: int | None = None,
+        attempts: int | None = None) -> list | dict:
     """GET a CFBD path with immutable, in-process, and last-good caching.
 
     Completed seasons use the permanent cache. Volatile endpoints are fetched
@@ -188,6 +191,13 @@ def get(path: str, *, cacheable: bool = True,
                 stale=previous.stale if previous else False,
                 error=previous.error if previous else None)
         return data
+
+    # A feature may ask for the same source more than once (portal rows feed
+    # both quality and churn, for example). After one complete retry sequence,
+    # fail that path immediately for the rest of this build instead of turning
+    # a provider outage into several minutes of duplicate timeouts.
+    if path in _FAILURES:
+        raise CFBDError(_FAILURES[path])
 
     if cacheable:
         hit = _cache_path(path)
@@ -211,10 +221,12 @@ def get(path: str, *, cacheable: bool = True,
         BASE + path,
         headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
     )
+    request_timeout = TIMEOUT if timeout is None else timeout
+    request_attempts = RETRIES if attempts is None else attempts
     last: Exception | None = None
-    for attempt in range(RETRIES):
+    for attempt in range(request_attempts):
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            with urllib.request.urlopen(req, timeout=request_timeout) as resp:
                 data = json.load(resp)
             break
         except urllib.error.HTTPError as exc:
@@ -225,7 +237,7 @@ def get(path: str, *, cacheable: bool = True,
             last = exc
         except Exception as exc:  # noqa: BLE001 - network flakiness is retried
             last = exc
-        if attempt + 1 < RETRIES:
+        if attempt + 1 < request_attempts:
             time.sleep(1.5 * (attempt + 1))
     else:
         fallback = _read_runtime(
@@ -237,7 +249,13 @@ def get(path: str, *, cacheable: bool = True,
             _record(path, "stale_snapshot", data, fetched_at=fetched_at, stale=True,
                     error=f"{type(last).__name__}: {last}")
             return data
-        raise CFBDError(f"CFBD request failed after {RETRIES} attempts: {path} ({last})")
+        message = f"CFBD request failed after {request_attempts} attempts: {path} ({last})"
+        _FAILURES[path] = message
+        _STATUS[path] = FetchStatus(
+            path=path, state="error", fetched_at=None, age_seconds=None,
+            rows=None, stale=False, error=f"{type(last).__name__}: {last}",
+        )
+        raise CFBDError(message)
 
     # Never cache an empty response. A feed that has not published yet returns
     # [], and caching that forever silently pins the model to "no data" long
@@ -313,7 +331,11 @@ def games(season: int, *, season_type: str = "regular", week: int | None = None,
 
 def calendar(season: int) -> list[dict]:
     """Official CFBD week boundaries, used instead of a hard-coded August date."""
-    return get(f"/calendar?year={season}", cacheable=_season_is_closed(season))
+    # Calendar is an optional refinement: the clock rule remains deterministic.
+    # Do not hold the entire build for the full data-endpoint retry budget when
+    # this small metadata endpoint is unavailable.
+    return get(f"/calendar?year={season}", cacheable=_season_is_closed(season),
+               timeout=8, attempts=1)
 
 
 def _season_is_closed(season: int) -> bool:

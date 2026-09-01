@@ -40,7 +40,7 @@ jobs:
         run: pip install .
 
       - name: Restore data snapshots and shadow ledger
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             data/cache
@@ -57,6 +57,7 @@ jobs:
           ODDS_BOOKMAKERS: draftkings
           CFB_REQUIRE_LIVE_ODDS: "1"
           PYTHONIOENCODING: utf-8
+          PYTHONUNBUFFERED: "1"
           IN_SEASON: ${{ github.event.inputs.season }}
           IN_WEEK: ${{ github.event.inputs.week }}
         run: python scripts/build_current.py --out _site/index.html
@@ -65,6 +66,18 @@ jobs:
         run: |
           python scripts/smoke_site.py _site/index.html
           python scripts/verify_build.py _site/build.json
+
+      # Preserve every validated non-empty response even when a later source or
+      # release gate fails. The next run can then recover through a bounded
+      # provider outage without repeating all successful calls.
+      - name: Save data snapshots and shadow ledger
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/cache
+            data/runtime-cache
+          key: cfb-runtime-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

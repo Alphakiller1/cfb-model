@@ -1,4 +1,5 @@
 import json
+import urllib.error
 
 import pytest
 
@@ -112,3 +113,19 @@ def test_nonempty_live_response_is_memoised_within_a_build(cache_dir, monkeypatc
     assert cfbd.get("/live?year=2026", cacheable=False)
     assert cfbd.get("/live?year=2026", cacheable=False)
     assert calls["n"] == 1
+
+
+def test_failed_endpoint_is_not_retried_again_in_same_build(cache_dir, monkeypatch):
+    calls = {"n": 0}
+    monkeypatch.setattr(cfbd, "RETRIES", 1)
+
+    def fail(*args, **kwargs):
+        calls["n"] += 1
+        raise urllib.error.URLError("provider down")
+
+    monkeypatch.setattr(cfbd.urllib.request, "urlopen", fail)
+    for _ in range(2):
+        with pytest.raises(cfbd.CFBDError):
+            cfbd.get("/player/portal?year=2026", cacheable=False)
+    assert calls["n"] == 1
+    assert cfbd.status_report()[0]["state"] == "error"
