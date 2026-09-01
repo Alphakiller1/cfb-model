@@ -107,11 +107,17 @@ terms.
 
 ## Verification
 
-- 195 automated tests pass.
+- 199 automated tests pass.
 - Python compilation passes.
 - Matrix/core sync passes.
 - The production workflow now contains a post-build manifest verifier in
   addition to the HTML smoke test.
+- Production run `33565986413` passed and deployed commit `ed14925`: 51 Week 1
+  games, 41 exact-identity DraftKings quotes, 14 CFBD endpoints, zero stale or
+  failed inputs, and a fresh Odds API snapshot with 496 credits remaining.
+- The public `build.json`, `board.json`, and rendered HTML were fetched after
+  deployment. They agree on season/week/game count, contain only DraftKings
+  sportsbook rows, and expose all 10 legitimately missing book quotes.
 
 Rendered browser QA was requested but could not be completed during the audit
 because the Codex browser extension was not connected. No alternate browser
@@ -128,9 +134,9 @@ is connected.
 3. Venue-specific home-field candidates exist but have not earned coefficients.
 4. DraftKings can legitimately leave games unposted. The UI distinguishes that
    from a failed feed; the deploy threshold is configurable and defaults to 50%.
-5. The live CFBD outage path must be exercised in GitHub Actions after merge so
-   its new FBS-scoped request and cache restore are verified against production
-   credentials.
+5. The Actions dependencies currently emit a Node 20 deprecation warning while
+   GitHub forces them onto Node 24. It does not affect the build, but should be
+   cleared when newer major action versions are available.
 
 ## Primary external references checked
 
