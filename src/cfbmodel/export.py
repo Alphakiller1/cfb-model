@@ -38,7 +38,7 @@ from cfbmodel import ratings as ratings_mod
 from cfbmodel import teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "2.0.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -77,12 +77,18 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         "total_modelled": forecast.total_modelled,
         "total_basis": forecast.total_basis,
         "used_efficiency": forecast.used_efficiency,
+        "model_regime": forecast.model_regime,
+        "preseason_margin": forecast.preseason_margin,
+        "efficiency_margin": forecast.efficiency_margin,
+        "efficiency_reliability": forecast.efficiency_reliability,
         "in_validated_regime": forecast.in_validated_regime,
         "action": forecast.action.value,
         "book": {
             "name": forecast.book_name,
             "margin": forecast.book_margin,
             "total": forecast.book_total,
+            "last_update": forecast.book_last_update,
+            "commence_time": forecast.book_commence_time,
         } if forecast.book_name else None,
     }
 

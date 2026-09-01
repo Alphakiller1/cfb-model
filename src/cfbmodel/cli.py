@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import statistics
+from dataclasses import dataclass
 from pathlib import Path
 
 from cfbmodel import forecast as fc
@@ -26,6 +27,13 @@ def _prior_season(season: int) -> int:
 def _to_games(rows: list[dict]) -> list[ratings.Game]:
     out = []
     for g in rows:
+        # The API contains every NCAA division. Lower-division-only games do not
+        # inform an FBS rating and, when collapsed into the shared __FCS__ node,
+        # add thousands of self-observations to that node. Keep FBS-vs-FCS games;
+        # discard only games with no FBS participant.
+        if (g.get("homeClassification") != "fbs"
+                and g.get("awayClassification") != "fbs"):
+            continue
         if g.get("homePoints") is None or g.get("awayPoints") is None:
             continue
         out.append(ratings.Game(
@@ -38,7 +46,14 @@ def _to_games(rows: list[dict]) -> list[ratings.Game]:
     return out
 
 
-def build_ratings(season: int, week: int) -> dict[str, float]:
+@dataclass(frozen=True)
+class RatingBundle:
+    table: dict[str, float]
+    components: dict[str, preseason.Components]
+    live: dict[str, float]
+
+
+def build_rating_bundle(season: int, week: int) -> RatingBundle:
     """Ratings known before `week` of `season`.
 
     A fitted preseason prior (prior seasons + talent + returning production +
@@ -49,10 +64,16 @@ def build_ratings(season: int, week: int) -> dict[str, float]:
     p1 = ratings.build(_to_games(cfbd.games(_prior_season(season), completed_only=True)))
     p2 = ratings.build(_to_games(cfbd.games(_prior_season(_prior_season(season)),
                                             completed_only=True)))
-    prior = preseason.build(season, p1, p2, preseason.roster_features(season))
+    extra = preseason.roster_features(season)
+    components = preseason.components(season, p1, p2, extra)
+    prior = {team: component.rating for team, component in components.items()}
     current_rows = [g for g in cfbd.games(season, completed_only=True) if g["week"] < week]
     live = ratings.build(_to_games(current_rows))
-    return preseason.blend(prior, live, week)
+    return RatingBundle(preseason.blend(prior, live, week), components, live)
+
+
+def build_ratings(season: int, week: int) -> dict[str, float]:
+    return build_rating_bundle(season, week).table
 
 
 def _preseason_totals(season: int) -> totals.PreseasonContext | None:
@@ -110,6 +131,24 @@ def _market(season: int, week: int) -> dict[tuple[str, str], float]:
     return out
 
 
+def _markets(rows: list[dict]) -> tuple[
+    dict[tuple[str, str], float], dict[tuple[str, str], float]
+]:
+    """Build spread and total maps from one CFBD response."""
+    margins: dict[tuple[str, str], float] = {}
+    totals_map: dict[tuple[str, str], float] = {}
+    for row in rows:
+        key = (row["homeTeam"], row["awayTeam"])
+        lines = row.get("lines") or []
+        spread = _consensus(lines, "spread")
+        total = _consensus(lines, "overUnder")
+        if spread is not None:
+            margins[key] = -spread
+        if total is not None:
+            totals_map[key] = total
+    return margins, totals_map
+
+
 def _market_totals(season: int, week: int) -> dict[tuple[str, str], float]:
     out: dict[tuple[str, str], float] = {}
     for row in cfbd.lines(season, week=week):
@@ -154,10 +193,14 @@ def cmd_board(args: argparse.Namespace) -> int:
 
     if rows and not rows[0][0].in_validated_regime:
         print(f"  [!] week {args.week} is before week {fc.FIRST_VALIDATED_WEEK}: forecasts here use a")
-        print("      fitted preseason prior rather than observed form, and the slate is full")
-        print("      of mismatches the backtest never covered. Measured weeks 1-4 MAE is")
-        print("      13.79 against a market of 12.00 - a 1.8-point gap, versus 0.37 from")
-        print("      week 5 on. Treat the market as the better estimate here.")
+        if args.week == 1:
+            print("      fitted preseason prior with no current-season form.")
+        else:
+            weight = matrix.EARLY_EFFICIENCY_RELIABILITY.get(args.week, 0.0)
+            print(f"      transition blend; observed form carries {weight:.0%} and the preseason")
+            print("      prior carries the balance.")
+        print("      Season-opening audit MAE is 12.54 against the market's 11.87.")
+        print("      Treat the market as the better estimate here.")
         print()
     # Chronological, matching the dashboard and the export. Ranking by |edge|
     # put the widest spreads on top, which is where a compressed model always

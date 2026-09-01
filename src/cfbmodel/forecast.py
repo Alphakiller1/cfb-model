@@ -6,8 +6,8 @@ would be a fit applied outside where it was measured:
 
 * **Full** -- both teams have complete opponent-adjusted form. Uses the jointly
   fitted model: `intercept + rating_margin * base + efficiency`. MAE 12.5251.
-* **Ratings-only fallback** -- either side is missing form (weeks 1-4, or a team
-  with no prior games). The joint coefficients cannot be used here: the rating
+* **Ratings-only fallback** -- either side is missing form (always week 1, or a
+  team with no prior games). The joint coefficients cannot be used here: the rating
   term carries only 0.4476 because efficiency carries the rest, so applying it
   alone would shrink every margin toward zero. Falls back to the separately
   validated ratings path with its own bias correction. MAE 12.9749.
@@ -19,6 +19,10 @@ across 3,256 out-of-sample games the model's MAE is 12.5251 against the market's
 52.38% breakeven. The model no longer loses *confidently* -- the interval now
 straddles breakeven -- but the point estimate is still short, so the honest
 anchored answer remains the price.
+
+* **Early transition** -- weeks 2-4 blend the full estimate at its measured
+  reliability (30%, 50%, 80%). Weeks 2-3 then receive separately held-out scale
+  calibration. This prevents a one-game sample from masquerading as mature form.
 
 Raising `lam` is a claim about evidence and belongs with a gate record, not a
 config tweak.
@@ -72,6 +76,12 @@ class Forecast:
     authority: Authority
     in_validated_regime: bool = True
     used_efficiency: bool = False
+    model_regime: str = "ratings_only"
+    # Early weeks blend the independently fitted preseason path with the noisy
+    # first observations. These fields make that transition auditable.
+    preseason_margin: float | None = None
+    efficiency_margin: float | None = None
+    efficiency_reliability: float = 0.0
     # Why `edge_points` is None despite a price being available. None when the
     # edge is published.
     edge_withheld_reason: str | None = None
@@ -86,6 +96,8 @@ class Forecast:
     book_name: str | None = None
     book_margin: float | None = None
     book_total: float | None = None
+    book_last_update: str | None = None
+    book_commence_time: str | None = None
 
     @property
     def has_price(self) -> bool:
@@ -103,14 +115,21 @@ def _model_margin(
     base: float,
     home_form: matrix.TeamForm | None,
     away_form: matrix.TeamForm | None,
-) -> tuple[float, bool]:
-    """Return (margin, used_efficiency)."""
+    *,
+    week: int | None = None,
+) -> tuple[float, bool, float, float | None, float]:
+    """Return model, form flag, preseason, full-efficiency, and form weight."""
+    preseason_margin = base + RATING_BIAS_CORRECTION
     if home_form is not None and away_form is not None:
         efficiency = matrix.margin_points(home_form, away_form)
         if efficiency is not None:
             c = matrix.COEFFICIENTS
-            return c["intercept"] + c["rating_margin"] * base + efficiency, True
-    return base + RATING_BIAS_CORRECTION, False
+            full_margin = c["intercept"] + c["rating_margin"] * base + efficiency
+            reliability = matrix.EARLY_EFFICIENCY_RELIABILITY.get(week, 1.0)
+            model = ((1.0 - reliability) * preseason_margin
+                     + reliability * full_margin)
+            return model, True, preseason_margin, full_margin, reliability
+    return preseason_margin, False, preseason_margin, None, 0.0
 
 
 def _edge(
@@ -177,14 +196,20 @@ def game(
     base = ratings.projected_margin(team_ratings, home, away, neutral=neutral)
     if base is None:
         raw_model_margin, used_efficiency = None, False
+        preseason_margin, efficiency_margin, efficiency_reliability = None, None, 0.0
     else:
-        raw_model_margin, used_efficiency = _model_margin(base, home_form, away_form)
+        (raw_model_margin, used_efficiency, preseason_margin,
+         efficiency_margin, efficiency_reliability) = _model_margin(
+            base, home_form, away_form, week=week
+        )
 
     # Week 1 is a distinct, historically under-dispersed regime. Apply only the
     # correction measured on held-out Week 1 seasons; never stretch later weeks
     # or the full efficiency model by analogy.
     if week == 1 and not used_efficiency:
         model_margin = calibration.WEEK1.apply(raw_model_margin)
+    elif week in calibration.EARLY_TRANSITION and used_efficiency:
+        model_margin = calibration.EARLY_TRANSITION[week].apply(raw_model_margin)
     else:
         model_margin = raw_model_margin
 
@@ -216,6 +241,12 @@ def game(
         authority=auth,
         in_validated_regime=in_regime,
         used_efficiency=used_efficiency,
+        model_regime=("full_efficiency" if efficiency_reliability == 1.0
+                      else "transition_blend" if efficiency_reliability > 0.0
+                      else "ratings_only"),
+        preseason_margin=preseason_margin,
+        efficiency_margin=efficiency_margin,
+        efficiency_reliability=efficiency_reliability,
         edge_withheld_reason=withheld,
         projected_total=projection.total,
         projected_home_score=projection.home_score,
@@ -226,4 +257,6 @@ def game(
         book_name=getattr(book, "book_title", None),
         book_margin=getattr(book, "home_margin", None),
         book_total=getattr(book, "total", None),
+        book_last_update=getattr(book, "last_update", None),
+        book_commence_time=getattr(book, "commence_time", None),
     )

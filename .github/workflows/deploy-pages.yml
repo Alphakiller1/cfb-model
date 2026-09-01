@@ -4,9 +4,10 @@ on:
   push:
     branches: [main]
   schedule:
-    # Tuesday 15:10 UTC — after the weekend's results and lines have settled,
-    # before the week's slate matters.
-    - cron: "10 15 * * 2"
+    # Twice daily Tuesday-Saturday in season. One DraftKings request carries
+    # both spreads and totals (2 credits); the free /sports preflight protects
+    # the quota floor.
+    - cron: "10 14,21 * * 2-6"
   workflow_dispatch:
     inputs:
       season:
@@ -38,23 +39,32 @@ jobs:
       - name: Install
         run: pip install .
 
+      - name: Restore data snapshots and shadow ledger
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/cache
+            data/runtime-cache
+          key: cfb-runtime-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            cfb-runtime-${{ runner.os }}-
+
       - name: Build dashboard
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
-          # Optional: without it the board still builds, just without a live book row.
+          # Production is single-book and fails closed if no slate line verifies.
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          ODDS_BOOKMAKERS: fanduel
+          ODDS_BOOKMAKERS: draftkings
+          CFB_REQUIRE_LIVE_ODDS: "1"
           PYTHONIOENCODING: utf-8
           IN_SEASON: ${{ github.event.inputs.season }}
           IN_WEEK: ${{ github.event.inputs.week }}
-        run: |
-          if ! python scripts/build_current.py --out _site/index.html; then
-            echo "::warning::Live data build failed; deploying the last verified snapshot"
-            test -s _site/index.html
-          fi
+        run: python scripts/build_current.py --out _site/index.html
 
       - name: Post-build smoke
-        run: python scripts/smoke_site.py _site/index.html
+        run: |
+          python scripts/smoke_site.py _site/index.html
+          python scripts/verify_build.py _site/build.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

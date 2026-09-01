@@ -18,13 +18,15 @@ dashboard that opened with a big confident number would be lying about that.
 from __future__ import annotations
 
 import html
+import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import matrix, preseason, ratings, teams, totals
+from cfbmodel import export, ledger, matrix, preseason, ratings, teams, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -181,16 +183,64 @@ def _authority_block(authority: auth_mod.Authority) -> str:
 
 def _tiles() -> str:
     data = [
-        ("12.5251", "Model MAE", "points per game, out of sample"),
-        ("12.1596", "Market MAE", "closing consensus spread"),
-        ("51.11%", "ATS on disagreements", "95% CI [49.39, 52.84] · breakeven 52.38"),
-        ("3,256", "Games evaluated", "2019, 2021–2025 walk-forward"),
+        ("12.5423", "Updated model MAE", "1,548 games · weeks 1–6 · 2021–2025"),
+        ("11.8741", "Market MAE", "same games · market remains better"),
+        ("52.42%", "ATS disagreements", "95% CI [49.91, 54.92] · still unproven"),
+        ("62.5%", "Underdog-side share", "69.2% before transition calibration"),
     ]
     return '<div class="tiles">' + "".join(
         f'<div class="tile"><span class="tile-v">{esc(v)}</span>'
         f'<span class="tile-l">{esc(label)}</span><span class="tile-n">{esc(note)}</span></div>'
         for v, label, note in data
     ) + "</div>"
+
+
+def _age_label(seconds: int | None) -> str:
+    if seconds is None:
+        return "unknown age"
+    if seconds < 90:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
+
+def _health_block(health: dict | None, record: dict | None) -> str:
+    if not health:
+        return ""
+    odds = health.get("odds") or {}
+    state = health.get("state", "unknown")
+    state_label = "All production checks passed" if state == "fresh" else "Data degraded"
+    state_class = "ops-ok" if state == "fresh" else "ops-warn"
+    matched, slate = odds.get("slate_matched", 0), odds.get("slate_games", 0)
+    book = str(odds.get("requested_book") or "sportsbook").replace("draftkings", "DraftKings")
+    remaining = odds.get("remaining")
+    remaining_label = "—" if remaining is None else remaining
+    graded = (record or {}).get("games_graded", 0)
+    model_mae = (record or {}).get("model_mae")
+    record_value = f"{graded} games" if graded else "collecting"
+    record_note = (f"shadow MAE {model_mae:.2f}" if model_mae is not None
+                   else "latest pre-kickoff snapshots")
+    issues = health.get("issues") or []
+    issue_html = "" if not issues else (
+        '<div class="ops-issues">' + "".join(f"<span>{esc(issue)}</span>" for issue in issues)
+        + "</div>"
+    )
+    return f"""<section class="ops {state_class}" aria-label="Production data health">
+<div class="ops-head"><span class="ops-dot"></span><b>{esc(state_label)}</b>
+<span>verified {esc(health.get('generated_at', ''))}</span></div>
+<div class="ops-grid">
+<div><span class="ops-k">CFBD inputs</span><strong>{esc(health.get('cfbd_state', 'unknown'))}</strong>
+<small>{esc(health.get('cfbd_endpoint_count', 0))} endpoints · oldest live input {_age_label(health.get('max_live_age_seconds'))}</small></div>
+<div><span class="ops-k">{esc(book)} lines</span><strong>{matched}/{slate} matched</strong>
+<small>{esc(odds.get('state', 'not run'))} · {esc(remaining_label)} credits remain</small></div>
+<div><span class="ops-k">Model lineage</span><strong>{esc(matrix.LINEAGE_VERSION)}</strong>
+<small>{'transition blend' if health.get('week', 1) < fc.FIRST_VALIDATED_WEEK else 'full efficiency regime'}</small></div>
+<div><span class="ops-k">2026 shadow record</span><strong>{esc(record_value)}</strong>
+<small>{esc(record_note)}</small></div>
+</div>{issue_html}</section>"""
 
 
 def _side(season: int, school: str, home: bool, score: float | None = None) -> str:
@@ -255,7 +305,9 @@ def _projection_rows(row: Row, season: int) -> str:
         out.append(_bd_row("Model margin", None, None, f.model_margin, kind="bd-row--total"))
     if (f.raw_model_margin is not None and f.model_margin is not None
             and f.raw_model_margin != f.model_margin):
-        out.append(_bd_row("Raw preseason prior", None, None,
+        raw_label = ("Pre-calibration transition estimate"
+                     if f.model_regime == "transition_blend" else "Raw preseason prior")
+        out.append(_bd_row(raw_label, None, None,
                            f.raw_model_margin, kind="bd-row--total"))
     if f.projected_total is not None:
         basis_label = {
@@ -319,10 +371,16 @@ def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float],
         # margin, so it is not shown -- a permanent "+0.00" row is noise.
         parts.append(_bd_section("Preseason rating inputs"))
         derived = getattr(hc, "talent_source", "published") == "reconstructed"
-        for (label, a_raw, a_pts), (_, h_raw, h_pts) in zip(ac.rows(), hc.rows()):
+        away_rows = {label: (raw, points) for label, raw, points in ac.rows()}
+        home_rows = {label: (raw, points) for label, raw, points in hc.rows()}
+        base_order = [label for label, _, _ in ac.rows()[:5]]
+        labels = base_order + sorted((set(away_rows) | set(home_rows)) - set(base_order))
+        for label in labels:
+            a_raw, a_pts = away_rows.get(label, (None, 0.0))
+            h_raw, h_pts = home_rows.get(label, (None, 0.0))
             # A term whose input is identically zero for BOTH teams is not a
             # measurement of parity -- it is a feed that has not published yet.
-            if a_raw == 0.0 and h_raw == 0.0:
+            if label in base_order and a_raw == 0.0 and h_raw == 0.0:
                 unavailable.append(label)
                 parts.append(_bd_row(f"{label} (not published yet)", None, None, None))
                 continue
@@ -391,12 +449,26 @@ def _breakdown(row: Row, season: int, rating_table: dict[str, float],
         parts.append(_bd_row(f"Rating + home field, x{c['rating_margin']:.2f}",
                              None, None, c["rating_margin"] * (gap + home_field)))
     parts.append(_bd_row("Intercept", None, None, c["intercept"]))
+    if 0.0 < f.efficiency_reliability < 1.0:
+        parts.append(_bd_section("Early-season reliability blend"))
+        parts.append(_bd_row("Preseason-prior margin", None, None, f.preseason_margin))
+        parts.append(_bd_row("Full efficiency margin", None, None, f.efficiency_margin))
+        parts.append(_bd_row(
+            f"Observed-form reliability ({f.efficiency_reliability:.0%})",
+            None, None, f.raw_model_margin, kind="bd-row--total"
+        ))
+        if f.model_margin != f.raw_model_margin:
+            parts.append(_bd_row("Outcome-scale calibration", None, None,
+                                 f.model_margin, kind="bd-row--total"))
     parts.append(_projection_rows(row, season))
 
     note = ("Values are opponent-adjusted, so they are comparable across schedules. "
             "<b>Pts</b> is each factor&rsquo;s effect on the home margin: positive favours "
             f"{esc(f.home)}. Allowed statistics are inverted, so a lower number is a "
             "better defence.")
+    if 0.0 < f.efficiency_reliability < 1.0:
+        note += (f" Early-season form is weighted {f.efficiency_reliability:.0%}; the balance "
+                 "stays on the preseason prior until the sample matures.")
     return _bd_shell(row, season, "".join(parts), note)
 
 
@@ -446,12 +518,27 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
     joiner = "VS" if f.neutral else "AT"
     neutral = ('<div class="game-when game-neutral">neutral site · no home field</div>'
                if f.neutral else "")
+    home_short = teams.get(season, f.home).short
+    if f.book_name:
+        spread = _fmt(-f.book_margin) if f.book_margin is not None else "—"
+        book_total = _fmt(f.book_total, sign=False) if f.book_total is not None else "—"
+        updated = f"updated {esc(f.book_last_update)}" if f.book_last_update else "update time unavailable"
+        quote = f"""<div class="quote">
+<div class="quote-source"><span class="live-dot"></span><b>{esc(f.book_name)}</b><small>{updated}</small></div>
+<div class="quote-val"><span>{esc(home_short)} spread</span><strong>{spread}</strong></div>
+<div class="quote-val"><span>Game total</span><strong>{book_total}</strong></div>
+</div>"""
+    else:
+        quote = """<div class="quote quote--missing"><div class="quote-source">
+<b>Live sportsbook line unavailable</b><small>This game was not matched to the configured book.</small>
+</div></div>"""
     return f"""<article class="game">
 <div class="game-top">
 {_side(season, f.away, home=False, score=f.projected_away_score)}
 <div class="game-mid"><span class="game-at">{joiner}</span>{when}{neutral}</div>
 {_side(season, f.home, home=True, score=f.projected_home_score)}
 </div>
+{quote}
 <div class="game-nums">
 <div class="gn"><span class="gn-l">Model</span>
 <span class="gn-v{"" if f.model_margin is not None else " gn-v--na"}">{_fmt(f.model_margin)}</span></div>
@@ -605,10 +692,18 @@ fallback, not a modelled figure.</p></div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
 <code>endWeek</code> is a real filter, so a backtest cannot see its own answer.</p></div>
 
+<div class="mth-card"><div class="mth-h">Early-season reliability</div>
+<p>Weeks 2–4 no longer treat one or two games of efficiency as a mature sample.
+The full efficiency estimate is blended at 30%, 50%, and 80% respectively, with
+the fitted preseason prior carrying the balance. On 778 games from 2021–2025,
+the blend lowered MAE from 13.65 to 13.22. Outcome-scale calibration in weeks
+2–3 lowered the final transition MAE to 12.72; week 4 calibration was rejected
+because it made error worse.</p></div>
+
 <div class="mth-card"><div class="mth-h">Where this is not validated</div>
-<p>Weeks 1–4 run on a fitted preseason prior rather than observed form. Measured
-MAE there is 13.79 against a market of 12.00 — a 1.8-point gap, versus 0.37 from
-week 5 on. Treat the market as the better estimate early.</p></div>
+<p>Week 1 is preseason-only; weeks 2–4 are a separately measured transition, not
+the mature full matrix. Across weeks 1–6 the updated model MAE is 12.54 against
+the market&rsquo;s 11.87. Treat the market as the better estimate early.</p></div>
 </div>"""
 
 
@@ -616,19 +711,32 @@ week 5 on. Treat the market as the better estimate early.</p></div>
 def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, float],
            authority: auth_mod.Authority, comps: dict | None = None,
            conference_rows: list | None = None,
-           conference_of: dict[str, str] | None = None) -> str:
+           conference_of: dict[str, str] | None = None,
+           health: dict | None = None,
+           record: dict | None = None,
+           generated_at: datetime | None = None) -> str:
     conference_table = _conference_table(conference_rows or [], rating_table,
                                          conference_of or {})
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     in_regime = week >= fc.FIRST_VALIDATED_WEEK
     regime_pill = ('<span class="pill pill-ok">validated regime</span>' if in_regime
                    else '<span class="pill pill-warn">outside validated regime</span>')
-    early_notice = "" if in_regime else (
-        '<div class="notice"><b>Week %d is outside the validated regime.</b> '
-        "Forecasts here use a fitted preseason prior rather than observed form, and the "
-        "slate is full of mismatches the backtest never covered. Measured weeks 1–4 MAE is "
-        "13.79 against a market of 12.00 — a 1.8-point gap, versus 0.37 from week 5 on."
-        "</div>" % week)
+    if in_regime:
+        early_notice = ""
+    elif week == 1:
+        early_notice = (
+            '<div class="notice"><b>Week 1 is preseason-only.</b> No current-season '
+            "form exists. The held-out scale correction improves the independent estimate, "
+            "but the market remains more accurate and the difference is not an edge.</div>"
+        )
+    else:
+        reliability = matrix.EARLY_EFFICIENCY_RELIABILITY.get(week, 0.0)
+        early_notice = (
+            f'<div class="notice"><b>Week {week} is a transition regime.</b> '
+            f"Observed form carries {reliability:.0%}; the preseason prior carries the balance. "
+            "The season-opening audit still favors the market (11.87 MAE vs 12.54), so the "
+            "difference is withheld as an edge.</div>"
+        )
 
     cards = "".join(_game_card(r, season, rating_table, comps) for r in rows) or (
         '<p class="dim">No FBS-vs-FBS games found for this week.</p>')
@@ -647,11 +755,13 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
 {_nav(season, week)}
 <main>
 <div class="wrap">
+{_health_block(health, record)}
 <section class="hero" style="margin-top:0">
 <span class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>CHASE ANALYTICS MODEL LAB</span>
 <h1 class="hero-title">College Football Model</h1>
-<p class="hero-sub">Opponent-adjusted power ratings and a market-anchored game forecast,
-with an explicit gate on what the numbers are allowed to be used for.</p>
+<p class="hero-sub">A point-in-time CFB forecasting system with verified DraftKings
+quotes, opponent-adjusted team strength, early-season reliability weighting, and a
+timestamped shadow record.</p>
 <div class="hero-meta">{regime_pill}
 <span class="pill">{len(rows)} games</span>
 <span class="pill">{len([r for r in rating_table if r != ratings.FCS])} FBS teams rated</span>
@@ -712,31 +822,32 @@ market and its authority is RESEARCH_ONLY; nothing here is a recommendation to w
 def build(*, season: int, week: int, out: Path) -> Path:
     """Fetch, forecast, and write the dashboard."""
     from cfbmodel import cli  # local import: cli owns the data assembly
+    from cfbmodel.sources import cfbd, oddsapi
 
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
+    cfbd.clear_run_state()
+    teams.load.cache_clear()
     authority = auth_mod.current()
-    rating_table = cli.build_ratings(season, week)
-    # Preseason component detail, so an early-season breakdown can show what the
-    # rating was actually built from rather than only asserting it.
-    try:
-        p1 = ratings.build(cli._to_games(cli.cfbd.games(cli._prior_season(season), completed_only=True)))
-        p2 = ratings.build(cli._to_games(cli.cfbd.games(cli._prior_season(cli._prior_season(season)),
-                                                        completed_only=True)))
-        comps = preseason.components(season, p1, p2)
-    except Exception:
-        comps = None
+    rating_bundle = cli.build_rating_bundle(season, week)
+    rating_table = rating_bundle.table
+    comps = rating_bundle.components
     forms = cli._forms(season, week)
     preseason_totals = cli._preseason_totals(season)
-    market = cli._market(season, week)
-    market_total = cli._market_totals(season, week)
-    # Live sportsbook lines are optional: no key, no quota, or no match simply
-    # means the board renders without a book row.
+    market_rows = cli.cfbd.lines(season, week=week)
+    market, market_total = cli._markets(market_rows)
+    season_games = cli.cfbd.games(season)
+
+    # A missing quote is an explicit source state, not an empty dictionary that
+    # looks indistinguishable from a successful refresh with no coverage.
+    odds_error = None
     try:
-        from cfbmodel.sources import oddsapi
         book_lines = oddsapi.fetch_lines(teams.load(season))
-    except Exception:
+    except Exception as exc:
         book_lines = {}
-    slate = [g for g in cli.cfbd.games(season, week=week)
-             if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
+        odds_error = f"{type(exc).__name__}: {exc}"
+    slate = [g for g in season_games if g.get("week") == week
+             and g.get("homeClassification") == "fbs"
+             and g.get("awayClassification") == "fbs"]
 
     rows: list[Row] = []
     for g in slate:
@@ -768,16 +879,99 @@ def build(*, season: int, week: int, out: Path) -> Path:
         from cfbmodel import conferences, teams as teams_mod
         meta = teams_mod.load(season)
         conference_of = {n: t.conference for n, t in meta.items() if t.conference}
-        completed = cli._to_games(cli.cfbd.games(season, completed_only=True))
+        completed = cli._to_games([g for g in season_games if g.get("completed")])
         conference_rows = conferences.rate(
             rating_table, conference_of,
             cross_counts=conferences.cross_conference_games(completed, conference_of),
         )
     except Exception:
         conference_rows, conference_of = [], {}
+
+    # Grade prior snapshots before recording this build. The ledger refuses to
+    # record a game after kickoff, which protects the record from hindsight.
+    record_summary: dict = {}
+    ledger_error = None
+    try:
+        ledger_payload = ledger.update(
+            season=season, week=week,
+            forecasts=[(row.forecast, row.kickoff_utc) for row in rows],
+            season_games=season_games, recorded_at=generated_at,
+        )
+        record_summary = ledger_payload.get("summary", {})
+    except Exception as exc:
+        ledger_error = f"{type(exc).__name__}: {exc}"
+
+    endpoint_status = cfbd.status_report()
+    current_status = [status for status in endpoint_status
+                      if str(season) in status["path"]]
+    stale = [status for status in current_status if status.get("stale")]
+    live_ages = [status["age_seconds"] for status in current_status
+                 if status.get("age_seconds") is not None]
+    odds_status = oddsapi.status_report()
+    matched_on_slate = sum(row.forecast.book_name is not None for row in rows)
+    odds_status.update({
+        "slate_matched": matched_on_slate,
+        "slate_games": len(rows),
+    })
+    issues: list[str] = []
+    if stale:
+        issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
+    if odds_error:
+        issues.append(f"Live sportsbook feed failed: {odds_error}")
+    elif rows and matched_on_slate == 0:
+        issues.append("DraftKings returned no matched lines for this slate")
+    elif matched_on_slate < len(rows):
+        issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
+    if ledger_error:
+        issues.append(f"Shadow ledger unavailable: {ledger_error}")
+
+    # The odds event and CFBD kickoff should describe the same game. A broad
+    # threshold tolerates rescheduling while still catching a wrong team match.
+    for row in rows:
+        book_time = _parse_kickoff(row.forecast.book_commence_time)
+        if book_time and row.kickoff_utc:
+            delta = abs((book_time - row.kickoff_utc).total_seconds())
+            if delta > 6 * 60 * 60:
+                issues.append(
+                    f"Kickoff mismatch for {row.forecast.away} at {row.forecast.home}"
+                )
+
+    health = {
+        "state": "fresh" if not issues else "degraded",
+        "generated_at": generated_at.strftime("%Y-%m-%d %H:%M UTC"),
+        "season": season,
+        "week": week,
+        "cfbd_state": "fresh" if not stale else "bounded snapshot",
+        "cfbd_endpoint_count": len(current_status),
+        "max_live_age_seconds": max(live_ages) if live_ages else None,
+        "cfbd": endpoint_status,
+        "odds": odds_status,
+        "issues": list(dict.fromkeys(issues)),
+    }
+
+    if os.getenv("CFB_REQUIRE_LIVE_ODDS", "").lower() in {"1", "true", "yes"}:
+        if odds_error or (rows and matched_on_slate == 0):
+            raise RuntimeError("production build requires at least one verified live book line")
+
     html_text = render(season=season, week=week, rows=rows,
                        rating_table=rating_table, authority=authority, comps=comps,
-                       conference_rows=conference_rows, conference_of=conference_of)
+                       conference_rows=conference_rows, conference_of=conference_of,
+                       health=health, record=record_summary, generated_at=generated_at)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
+
+    # Publish machine-readable evidence beside the page. Monitoring can inspect
+    # freshness and sportsbook coverage without scraping presentation markup.
+    board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
+    export.write(
+        export.payload(season=season, week=week, rows=board_rows,
+                       authority=authority, generated_at=generated_at),
+        out.parent / "board.json",
+    )
+    (out.parent / "build.json").write_text(
+        json.dumps(health, indent=2) + "\n", encoding="utf-8"
+    )
+    (out.parent / "record.json").write_text(
+        json.dumps(record_summary, indent=2) + "\n", encoding="utf-8"
+    )
     return out

@@ -165,7 +165,7 @@ def _returning(season: int) -> dict[str, float]:
 
 def _recruiting(season: int) -> dict[str, float]:
     try:
-        rows = cfbd.get(f"/recruiting/teams?year={season}")
+        rows = cfbd.recruiting_teams(season)
     except Exception:
         return {}
     return {r["team"]: float(r["points"]) for r in rows if r.get("points") is not None}
@@ -192,6 +192,10 @@ class Components:
     # was rebuilt from recruiting classes. Shown in the breakdown so a reader is
     # never told a derived number is a published one.
     talent_source: str = "published"
+    # (human label, centred/raw input, rating-point contribution). These terms
+    # used to affect the rating without appearing in the dashboard breakdown,
+    # so the displayed arithmetic did not reconcile with the shipped model.
+    extra_terms: tuple[tuple[str, float, float], ...] = ()
 
     def rows(self) -> list[tuple[str, float, float]]:
         """(label, raw, points) in the order they should be displayed."""
@@ -201,6 +205,7 @@ class Components:
             ("Recruiting talent", *self.talent),
             ("Returning production", *self.returning_production),
             ("Recruiting class", *self.recruiting_points),
+            *self.extra_terms,
         ]
 
 
@@ -246,9 +251,22 @@ def components(
             talent_source=talent_source,
         )
         bonus_values = extra.get(team, {})
-        bonus = sum(EXTRA_COEFFICIENTS[name] * value
-                    for name, value in bonus_values.items()
-                    if name in EXTRA_COEFFICIENTS)
+        labels = {
+            "qb_returning": "QB returning production",
+            "portal_net": "Transfer portal net quality",
+            "portal_churn": "Transfer portal churn",
+            "coach_shift_defensive_havoc": "Coach shift · defensive havoc",
+            "coach_shift_pass_rate": "Coach shift · pass rate",
+            "coach_shift_tempo": "Coach shift · tempo",
+            "first_year_coach": "First-year head coach",
+        }
+        extra_terms = tuple(
+            (labels.get(name, name.replace("_", " ").title()), value,
+             EXTRA_COEFFICIENTS[name] * value)
+            for name, value in sorted(bonus_values.items())
+            if name in EXTRA_COEFFICIENTS
+        )
+        bonus = sum(points for _, _, points in extra_terms)
         total = (bonus + terms.intercept + terms.prior_rating[1] + terms.prior_rating_2[1]
                  + terms.talent[1] + terms.returning_production[1]
                  + terms.recruiting_points[1])
@@ -261,6 +279,7 @@ def components(
             intercept=terms.intercept,
             rating=total,
             talent_source=talent_source,
+            extra_terms=extra_terms,
         )
     return out
 

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-LINEAGE_VERSION = "2026.08-opponent-adjusted"
+LINEAGE_VERSION = "2026.09-reliability-blended"
 STATUS = "CHALLENGER/UNPROMOTED"
 SOURCE_LINEAGE = (
     "chase-analytics-brain/core/genesis/sports/cfb.py",
@@ -80,6 +80,18 @@ HOME_FIELD_POINTS = 4.53
 BLOWOUT_CAP = 32.0
 RECENCY_HALFLIFE_WEEKS = 12.0
 MARGIN_SD = 24.2
+
+# Early-season form reliability. One or two games of opponent-adjusted form are
+# informative, but treating them as a full-season estimate is noisy. Measured on
+# 778 FBS-vs-FBS games from 2021-2025, fixed week-level blends lowered MAE from
+# 13.6453 (full efficiency immediately) and 13.6767 (preseason only) to 13.2219.
+# The candidate improved every held-out season. Week 5 remains the first regime
+# where the full matrix was originally validated.
+EARLY_EFFICIENCY_RELIABILITY: dict[int, float] = {
+    2: 0.30,
+    3: 0.50,
+    4: 0.80,
+}
 
 GROUPS = {
     "offense": OFFENSE_WEIGHTS,

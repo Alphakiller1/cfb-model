@@ -126,6 +126,24 @@ def test_the_two_regimes_are_not_the_same_number():
     assert full.model_margin != pytest.approx(bare.model_margin)
 
 
+def test_early_efficiency_is_reliability_blended_not_treated_as_mature():
+    early = fc.game(home="A", away="B", team_ratings=RATINGS,
+                    home_form=_full_form(), away_form=_full_form(), week=2)
+    assert early.model_regime == "transition_blend"
+    assert early.efficiency_reliability == pytest.approx(0.30)
+    blended = 0.70 * early.preseason_margin + 0.30 * early.efficiency_margin
+    assert early.raw_model_margin == pytest.approx(blended)
+    assert early.model_margin == pytest.approx(1.3495 + 1.4159 * blended)
+
+
+def test_week_five_uses_the_full_efficiency_matrix():
+    mature = fc.game(home="A", away="B", team_ratings=RATINGS,
+                     home_form=_full_form(), away_form=_full_form(), week=5)
+    assert mature.model_regime == "full_efficiency"
+    assert mature.efficiency_reliability == pytest.approx(1.0)
+    assert mature.model_margin == pytest.approx(mature.efficiency_margin)
+
+
 def _paced_form():
     return matrix.TeamForm(
         off_ppa=0.20, off_successRate=0.46, off_explosiveness=1.20, off_stuffRate=0.17,

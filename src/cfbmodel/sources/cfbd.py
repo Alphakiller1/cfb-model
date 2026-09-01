@@ -9,9 +9,10 @@ totals while forecasting week 6 would hand the model the answer. Every function
 here that returns team form therefore *requires* the week you are forecasting and
 queries strictly before it.
 
-**Caching.** A completed week never changes, so it is cached to disk forever. The
-current week is volatile and is never cached. That distinction is the whole cache
-policy; getting it backwards either burns quota or serves stale form.
+**Caching.** Closed-season data is immutable. Current-season data is memoised for
+one build and retained as a timestamped last-good runtime snapshot, never as a
+permanent cache entry. A bounded stale snapshot may bridge a short provider
+outage, but its provenance travels to the manifest and dashboard.
 
 No third-party dependencies -- stdlib only, so this package stays importable
 anywhere without a build step.
@@ -26,12 +27,37 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 BASE = "https://api.collegefootballdata.com"
 CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "cache"
-TIMEOUT = 60
-RETRIES = 3
+RUNTIME_CACHE_DIR = Path(
+    os.getenv(
+        "CFB_RUNTIME_CACHE_DIR",
+        str(Path(__file__).resolve().parents[3] / "data" / "runtime-cache" / "cfbd"),
+    )
+)
+TIMEOUT = int(os.getenv("CFBD_TIMEOUT_SECONDS", "25"))
+RETRIES = int(os.getenv("CFBD_RETRIES", "2"))
+
+
+@dataclass(frozen=True)
+class FetchStatus:
+    """Provenance for one endpoint used during the current build."""
+
+    path: str
+    state: str                 # live | memory | historical_cache | stale_snapshot
+    fetched_at: str | None
+    age_seconds: int | None
+    rows: int | None
+    stale: bool = False
+    error: str | None = None
+
+
+_MEMORY: dict[str, list | dict] = {}
+_STATUS: dict[str, FetchStatus] = {}
 
 
 class CFBDError(RuntimeError):
@@ -61,13 +87,117 @@ def _cache_path(path: str) -> Path:
     return CACHE_DIR / f"{digest}.json"
 
 
-def get(path: str, *, cacheable: bool = True) -> list | dict:
-    """GET a CFBD path. `cacheable=False` for anything covering the live week."""
+def _runtime_path(path: str) -> Path:
+    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:20]
+    return RUNTIME_CACHE_DIR / f"{digest}.json"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _stamp(moment: datetime | None = None) -> str:
+    return (moment or _utc_now()).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_stamp(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_count(data: list | dict) -> int | None:
+    return len(data) if isinstance(data, (list, dict)) else None
+
+
+def _record(path: str, state: str, data: list | dict, *, fetched_at: str | None,
+            stale: bool = False, error: str | None = None) -> None:
+    moment = _parse_stamp(fetched_at)
+    age = max(0, int((_utc_now() - moment).total_seconds())) if moment else None
+    _STATUS[path] = FetchStatus(
+        path=path, state=state, fetched_at=fetched_at, age_seconds=age,
+        rows=_row_count(data), stale=stale, error=error,
+    )
+
+
+def clear_run_state() -> None:
+    """Clear process-local memoisation and provenance before a new build."""
+    _MEMORY.clear()
+    _STATUS.clear()
+
+
+def status_report() -> list[dict]:
+    """JSON-safe endpoint provenance, ordered by request path."""
+    return [asdict(_STATUS[path]) for path in sorted(_STATUS)]
+
+
+def _atomic_write(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _stale_limit(path: str) -> int:
+    """Maximum age of a last-good volatile snapshot after a network failure.
+
+    A stale market is materially different from a stale roster prior. These
+    limits keep the build available through a short provider outage while the
+    dashboard reports the degradation explicitly.
+    """
+    if path.startswith("/lines"):
+        return 6 * 60 * 60
+    if path.startswith("/games") or path.startswith("/stats/game"):
+        return 72 * 60 * 60
+    return 30 * 24 * 60 * 60
+
+
+def _read_runtime(path: str, *, max_age: int) -> tuple[list | dict, str] | None:
+    snapshot = _runtime_path(path)
+    if not snapshot.is_file():
+        return None
+    try:
+        envelope = json.loads(snapshot.read_text(encoding="utf-8"))
+        data, fetched_at = envelope["data"], envelope["fetched_at"]
+        moment = _parse_stamp(fetched_at)
+        if moment is None or (_utc_now() - moment).total_seconds() > max_age:
+            return None
+        return data, fetched_at
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def get(path: str, *, cacheable: bool = True,
+        stale_if_error: int | None = None) -> list | dict:
+    """GET a CFBD path with immutable, in-process, and last-good caching.
+
+    Completed seasons use the permanent cache. Volatile endpoints are fetched
+    once per build, then written as last-good snapshots. A short provider outage
+    may use a bounded snapshot, but that state is recorded for the build
+    manifest and dashboard instead of being silently presented as fresh.
+    """
+    if path in _MEMORY:
+        data = _MEMORY[path]
+        previous = _STATUS.get(path)
+        _record(path, previous.state if previous else "memory", data,
+                fetched_at=previous.fetched_at if previous else None,
+                stale=previous.stale if previous else False,
+                error=previous.error if previous else None)
+        return data
+
     if cacheable:
         hit = _cache_path(path)
         if hit.is_file():
             try:
-                return json.loads(hit.read_text(encoding="utf-8"))
+                data = json.loads(hit.read_text(encoding="utf-8"))
+                fetched_at = _stamp(datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc))
+                _MEMORY[path] = data
+                _record(path, "historical_cache", data, fetched_at=fetched_at)
+                return data
             except json.JSONDecodeError:
                 hit.unlink(missing_ok=True)  # corrupt entry: refetch
 
@@ -90,11 +220,23 @@ def get(path: str, *, cacheable: bool = True) -> list | dict:
         except urllib.error.HTTPError as exc:
             if exc.code in (401, 403):
                 raise CFBDError(f"CFBD rejected the key ({exc.code}). Check CFBD_API_KEY.") from exc
+            if exc.code < 500 and exc.code not in (408, 429):
+                raise CFBDError(f"CFBD request rejected ({exc.code}): {path}") from exc
             last = exc
         except Exception as exc:  # noqa: BLE001 - network flakiness is retried
             last = exc
-        time.sleep(1.5 * (attempt + 1))
+        if attempt + 1 < RETRIES:
+            time.sleep(1.5 * (attempt + 1))
     else:
+        fallback = _read_runtime(
+            path, max_age=_stale_limit(path) if stale_if_error is None else stale_if_error
+        )
+        if fallback is not None:
+            data, fetched_at = fallback
+            _MEMORY[path] = data
+            _record(path, "stale_snapshot", data, fetched_at=fetched_at, stale=True,
+                    error=f"{type(last).__name__}: {last}")
+            return data
         raise CFBDError(f"CFBD request failed after {RETRIES} attempts: {path} ({last})")
 
     # Never cache an empty response. A feed that has not published yet returns
@@ -103,23 +245,75 @@ def get(path: str, *, cacheable: bool = True) -> list | dict:
     # composite: an empty reply was cached, CFBD published 138 teams days later,
     # and only the uncached CI build ever saw them.
     if cacheable and data:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        _cache_path(path).write_text(json.dumps(data), encoding="utf-8")
+        _atomic_write(_cache_path(path), data)
+    fetched_at = _stamp()
+    if not cacheable and data:
+        _atomic_write(_runtime_path(path), {
+            "path": path, "fetched_at": fetched_at, "data": data,
+        })
+    # Preserve the long-standing empty-feed rule in process memory too. Current
+    # offseason feeds legitimately return [] before publication and must be
+    # polled again later in the same process.
+    if data:
+        _MEMORY[path] = data
+    _record(path, "live", data, fetched_at=fetched_at)
     return data
 
 
 # ── Games ────────────────────────────────────────────────────────────────────
+def _normalise_game(row: dict) -> dict:
+    """Accept both the legacy flat game schema and CFBD's nested 2026 schema."""
+    home, away = row.get("homeTeam"), row.get("awayTeam")
+    if not isinstance(home, dict) and not isinstance(away, dict):
+        return row
+    home = home if isinstance(home, dict) else {}
+    away = away if isinstance(away, dict) else {}
+    venue = row.get("venue") if isinstance(row.get("venue"), dict) else {}
+    status = str(row.get("status") or "").lower()
+    out = dict(row)
+    out.update({
+        "homeTeam": home.get("name"),
+        "awayTeam": away.get("name"),
+        "homePoints": home.get("points"),
+        "awayPoints": away.get("points"),
+        "homeClassification": home.get("classification"),
+        "awayClassification": away.get("classification"),
+        "homeConference": home.get("conference"),
+        "awayConference": away.get("conference"),
+        "venueId": venue.get("id"),
+        "completed": row.get("completed", status in {"completed", "final"}),
+    })
+    return out
+
+
 def games(season: int, *, season_type: str = "regular", week: int | None = None,
-          completed_only: bool = False) -> list[dict]:
-    """Games for a season. Includes FCS opponents; filter with `fbs_only`."""
+          completed_only: bool = False, classification: str | None = "fbs") -> list[dict]:
+    """Games involving the requested classification (FBS by default).
+
+    Asking CFBD for every NCAA division returned roughly 3,700 games per season
+    even though fewer than 900 involved an FBS team. The smaller query avoids
+    provider timeouts and prevents lower-division-only games from entering the
+    shared FCS rating node.
+    """
     path = f"/games?year={season}&seasonType={season_type}"
+    if classification:
+        path += f"&classification={urllib.parse.quote(classification)}"
     if week is not None:
         path += f"&week={week}"
     # A season still in progress must not be cached, or the tail freezes.
-    rows = get(path, cacheable=_season_is_closed(season))
+    rows = [_normalise_game(g) for g in get(path, cacheable=_season_is_closed(season))]
+    if classification == "fbs":
+        rows = [g for g in rows if "fbs" in {
+            g.get("homeClassification"), g.get("awayClassification")
+        }]
     if completed_only:
         rows = [g for g in rows if g.get("completed")]
     return rows
+
+
+def calendar(season: int) -> list[dict]:
+    """Official CFBD week boundaries, used instead of a hard-coded August date."""
+    return get(f"/calendar?year={season}", cacheable=_season_is_closed(season))
 
 
 def _season_is_closed(season: int) -> bool:
@@ -134,7 +328,7 @@ def _current_season() -> int:
 
 
 def fbs_teams(season: int) -> list[dict]:
-    return get(f"/teams/fbs?year={season}")
+    return get(f"/teams/fbs?year={season}", cacheable=_season_is_closed(season))
 
 
 # ── Point-in-time team form ──────────────────────────────────────────────────
@@ -147,7 +341,8 @@ def advanced_season_stats(season: int, *, through_week: int) -> list[dict]:
     """
     if through_week <= 1:
         return []
-    return get(f"/stats/season/advanced?year={season}&endWeek={through_week - 1}")
+    return get(f"/stats/season/advanced?year={season}&endWeek={through_week - 1}",
+               cacheable=_season_is_closed(season))
 
 
 def game_advanced_stats(season: int, *, week: int, exclude_garbage_time: bool = True) -> list[dict]:
@@ -187,7 +382,8 @@ def season_game_stats(season: int, *, through_week: int,
 def ppa_teams(season: int, *, through_week: int) -> list[dict]:
     if through_week <= 1:
         return []
-    return get(f"/ppa/teams?year={season}&endWeek={through_week - 1}")
+    return get(f"/ppa/teams?year={season}&endWeek={through_week - 1}",
+               cacheable=_season_is_closed(season))
 
 
 # ── Season-level priors (legitimately known before kickoff) ──────────────────
@@ -213,7 +409,12 @@ def portal(season: int) -> list[dict]:
     state and not a parse failure -- `roster.py` treats it as a departure with no
     matching arrival.
     """
-    return get(f"/player/portal?year={season}")
+    return get(f"/player/portal?year={season}", cacheable=_season_is_closed(season))
+
+
+def recruiting_teams(season: int) -> list[dict]:
+    """Team recruiting classes, progressive until the current cycle closes."""
+    return get(f"/recruiting/teams?year={season}", cacheable=_season_is_closed(season))
 
 
 def coaches(season: int, *, history: int = 0) -> list[dict]:
@@ -227,8 +428,9 @@ def coaches(season: int, *, history: int = 0) -> list[dict]:
     run of seasons.
     """
     if history > 0:
-        return get(f"/coaches?minYear={season - history}&maxYear={season}")
-    return get(f"/coaches?year={season}")
+        return get(f"/coaches?minYear={season - history}&maxYear={season}",
+                   cacheable=_season_is_closed(season))
+    return get(f"/coaches?year={season}", cacheable=_season_is_closed(season))
 
 
 def venues() -> list[dict]:
@@ -251,4 +453,4 @@ def lines(season: int, *, week: int | None = None, season_type: str = "regular")
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 def sp_ratings(season: int) -> list[dict]:
     """SP+ (Bill Connelly). A strong public benchmark to measure against."""
-    return get(f"/ratings/sp?year={season}")
+    return get(f"/ratings/sp?year={season}", cacheable=_season_is_closed(season))

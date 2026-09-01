@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from cfbmodel import site  # noqa: E402
+from cfbmodel.sources import cfbd  # noqa: E402
 
 # CFB week 1 opens in the last week of August. Weeks are capped at 15 so a
 # post-season run does not ask CFBD for a week that does not exist.
@@ -34,6 +35,27 @@ def current_week(now: dt.datetime, season: int) -> int:
     return max(1, min(MAX_WEEK, ((now - start).days // 7) + 1))
 
 
+def official_week(now: dt.datetime, season: int) -> int:
+    """Resolve the week from CFBD's calendar, with the clock rule as fallback."""
+    try:
+        periods = [p for p in cfbd.calendar(season)
+                   if str(p.get("seasonType", "regular")).lower() == "regular"]
+        dated = []
+        for period in periods:
+            start = dt.datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
+            end = dt.datetime.fromisoformat(str(period["endDate"]).replace("Z", "+00:00"))
+            dated.append((start, end, int(period["week"])))
+        for start, end, week in dated:
+            if start <= now <= end + dt.timedelta(days=1):
+                return week
+        begun = [week for start, _, week in dated if start <= now]
+        if begun:
+            return max(begun)
+    except Exception as exc:
+        print(f"calendar lookup unavailable ({exc}); using clock fallback")
+    return current_week(now, season)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="_site/index.html")
@@ -43,7 +65,7 @@ def main() -> int:
 
     now = dt.datetime.now(dt.timezone.utc)
     season = args.season or int(os.environ.get("IN_SEASON") or 0) or current_season(now)
-    week = args.week or int(os.environ.get("IN_WEEK") or 0) or current_week(now, season)
+    week = args.week or int(os.environ.get("IN_WEEK") or 0) or official_week(now, season)
 
     print(f"building season={season} week={week}")
     path = site.build(season=season, week=week, out=Path(args.out))

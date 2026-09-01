@@ -38,8 +38,9 @@ edge. Two constraints remain:
    a bettable disagreement. The honest next fix is closing the information gap.
 
 `fit` is here so every calibration is measured against outcomes rather than
-argued about. `WEEK1` carries the recorded result; later preseason weeks remain
-identity until separately validated.
+argued about. `WEEK1` carries the recorded result; weeks 2-3 use their separately
+validated transition corrections, while week 4 remains identity because its
+candidate correction failed the held-out MAE test.
 """
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ class Calibration:
         return self.intercept + self.slope * predicted
 
 
-# Weeks 2-4 remain identity. Week 1 is materially different: it contains the
+# Week 1 is materially different: it contains the
 # season's largest talent mismatches and no current-season observations. On 282
 # FBS-vs-FBS Week 1 games (2019, 2021-2025), leave-one-season-out affine
 # calibration reduced MAE from 14.4109 to 12.8499 and the underdog-side rate
@@ -86,6 +87,26 @@ WEEK1 = Calibration(
     slope=1.5333,
     provenance="LOSO 282 Week 1 FBS-vs-FBS games, 2019 and 2021-2025",
 )
+
+# Once the reliability blend stopped treating one or two games as a mature
+# efficiency sample, weeks 2-3 remained consistently under-dispersed. Fitting
+# actual margin on that transition estimate leave-one-season-out (2021-2025)
+# produced nearly identical slopes in both weeks. The fixed mean coefficients
+# improved every held-out season and reduced pooled MAE 13.8522 -> 13.1029 over
+# 493 games. Week 4 was tested and rejected (12.0445 -> 12.1698), so it remains
+# identity rather than inheriting a correction by analogy.
+EARLY_TRANSITION: dict[int, Calibration] = {
+    2: Calibration(
+        intercept=1.3495,
+        slope=1.4159,
+        provenance="LOSO 238 Week 2 FBS-vs-FBS games, 2021-2025",
+    ),
+    3: Calibration(
+        intercept=-0.6477,
+        slope=1.4155,
+        provenance="LOSO 255 Week 3 FBS-vs-FBS games, 2021-2025",
+    ),
+}
 
 # Applied to ratings-only weeks other than Week 1. Identity until separately
 # fitted and validated.

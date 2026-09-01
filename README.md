@@ -43,6 +43,36 @@ edge: an interval containing the bar is what "unproven" looks like, so
 `authority.current()` returns `RESEARCH_ONLY` and `may_bet` is `False`. Full
 evidence: [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
+### 2026 season-opening audit
+
+The September production audit re-ran the early-season path on **1,548
+point-in-time games from 2021–2025, weeks 1–6**. The prior implementation used
+the full efficiency matrix as soon as both teams had one game, even though that
+matrix was validated only from week 5. A week-level reliability transition now
+weights observed form 30% / 50% / 80% in weeks 2 / 3 / 4. Weeks 2–3 then receive
+separately validated outcome-scale calibration; week 4 calibration was tested
+and rejected because it increased error.
+
+| Season-opening audit | MAE |
+| --- | ---: |
+| Market | **11.8741** |
+| Updated model | 12.5423 |
+| Pre-upgrade model | 13.0086 |
+
+The transition and calibration were selected leave-one-season-out; the fixed
+mean coefficients improved all five historical seasons and now require forward
+shadow confirmation. Underdog-side disagreements are
+62.5%, down from 69.2% before that calibration; ATS is 801–727 (52.42%, 95% CI
+[49.91%, 54.92%]). The interval still crosses breakeven and the market still has
+lower MAE, so authority remains `RESEARCH_ONLY`.
+
+Production now also fails closed: it requests only FBS-involving games, uses the
+official CFBD calendar, locks live prices to DraftKings, writes a machine-readable
+freshness manifest, retains bounded last-good endpoint snapshots, and refuses a
+deployment with no verified sportsbook coverage. Every pre-kickoff quote enters
+a shadow ledger and is graded deterministically when the final score arrives.
+Full findings: [`reports/PRODUCTION_AUDIT_2026-09-01.md`](reports/PRODUCTION_AUDIT_2026-09-01.md).
+
 ## What is actually different about college football
 
 Three things drive the design, and all three are measured, not assumed:
@@ -91,24 +121,24 @@ The market still scored better at **11.7838 MAE**. The remaining gap is
 information the price has before kickoff that the model does not: transfer
 portal detail, quarterback availability, coaching changes, and late roster news.
 
-So the difference is still published, as `market_gap`, and it is no longer called
-an edge: `edge_points` is `None` outside the validated regime and
-`edge_withheld_reason` names the rule. Inflating the estimate to match a
-better-informed one was the alternative, and it was rejected twice over —
-expansion is monotonically worse on MAE (12.9749 → 13.6962, measured), and it
-would manufacture confidence the model has not earned.
+Weeks 2–4 now use observed form, but only in proportion to its measured
+reliability. That makes the estimate more predictive without pretending a
+one-game sample is mature. Weeks 2–3 also have their own held-out scale
+calibration. The difference from the market is still published as `market_gap`,
+not as an edge: `edge_points` is `None` outside the validated regime and
+`edge_withheld_reason` names the rule.
 
 `calibration.py` measures the slope that MAE cannot see; run `cfbmodel calibrate`
-to fit it per regime against actual outcomes. `calibration.PRESEASON` ships as
-identity on purpose. Full evidence and the open work — a tier/conference term,
-FCS stratification, and the unwired transfer portal — are in
+to fit it per regime against actual outcomes. Full evidence and the open work —
+venue-specific home field and licensed historical availability data — are in
 [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
 ## How it fits together
 
 | Module | Role |
 | --- | --- |
-| `sources/cfbd.py` | CFBD client. Enforces point-in-time queries and caches only closed weeks. |
+| `sources/cfbd.py` | CFBD client. FBS-scoped requests, dual-schema normalization, point-in-time rules, bounded snapshots, and source provenance. |
+| `sources/oddsapi.py` | Exact-book DraftKings feed with quota, range, team-match, and timestamp validation. |
 | `ratings.py` | Opponent-adjusted, blowout-capped power ratings. |
 | `efficiency.py` | Opponent adjustment — solves offense and defense jointly, like the ratings. |
 | `matrix.py` | Fitted matrix. Weight groups are the interpretation; `COEFFICIENTS` is the predictor. |
@@ -120,6 +150,7 @@ FCS stratification, and the unwired transfer portal — are in
 | `venue.py` | Elevation, travel, and body-clock terms for home field. |
 | `fitting.py` | Stdlib OLS and the leave-one-season-out adoption harness. |
 | `export.py` | The board as JSON, for downstream renderers. |
+| `ledger.py` | Immutable pre-kickoff quote snapshots and deterministic shadow grading. |
 | `authority.py` | What a forecast is *allowed* to be used for. |
 
 ### Point-in-time is enforced, not hoped for
@@ -144,13 +175,13 @@ boolean that flips it on.
 
 ### Where this is *not* validated
 
-Weeks 1–4 have no current-season form and lean on discounted carryover ratings,
-and week-1 slates are full of power-vs-Group-of-5 mismatches the backtest never
-covered. On the 2026 week 1 slate the model read Indiana −14.1 against a market of
-−40.8, and the market was right. The board prints a loud warning for those weeks.
+Week 1 has no current-season form. Weeks 2–4 are a measured transition regime,
+not the mature full-efficiency regime: observed form carries 30%, 50%, and 80%.
+The board prints the regime and exposes both component margins. No disagreement
+from these weeks is authorized as an edge.
 
 ## Tests
 
 ```bash
-python -m pytest -q     # 74 passed
+python -m pytest -q     # 195 passed
 ```

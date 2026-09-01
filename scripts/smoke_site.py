@@ -45,6 +45,16 @@ def _breakdown_mismatches(html: str, tolerance: float = 0.03) -> int:
         margin = _grab(block, "Model margin")
         if margin is None:
             continue
+        calibrated = _grab(block, "Outcome-scale calibration")
+        if calibrated is not None:
+            if abs(calibrated - margin) > tolerance:
+                bad += 1
+            continue
+        blended = _grab(block, "Observed-form reliability")
+        if blended is not None:
+            if abs(blended - margin) > tolerance:
+                bad += 1
+            continue
         efficiency = _grab(block, "Efficiency edge")
         if efficiency is None:
             continue      # preseason regime; its rows are inputs, not addends

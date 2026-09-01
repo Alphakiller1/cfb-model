@@ -13,6 +13,24 @@ a{color:var(--v-light);text-decoration:none}a:hover{text-decoration:underline}
 .num{font-variant-numeric:tabular-nums}
 .dim{color:var(--text-2)}
 
+/* production health: the page proves its data state before presenting numbers */
+.ops{margin-top:18px;border:1px solid var(--border-2);border-radius:16px;
+background:linear-gradient(180deg,rgba(18,20,29,.96),rgba(8,9,15,.82));overflow:hidden}
+.ops-head{display:flex;align-items:center;gap:9px;padding:11px 15px;border-bottom:1px solid var(--border-soft);
+font-size:12px;color:var(--text-2)}
+.ops-head b{font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;color:var(--text)}
+.ops-head span:last-child{margin-left:auto;color:var(--text-3)}
+.ops-dot,.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(60,203,127,.65)}
+.ops-warn .ops-dot{background:var(--gold);box-shadow:0 0 10px rgba(232,194,74,.55)}
+.ops-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.ops-grid>div{padding:14px 15px;border-right:1px solid var(--border-soft);min-width:0}
+.ops-grid>div:last-child{border-right:0}
+.ops-k{display:block;color:var(--text-3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em}
+.ops-grid strong{display:block;margin-top:4px;font-family:var(--display);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-grid small{display:block;color:var(--text-3);font-size:10.5px;margin-top:3px}
+.ops-issues{display:flex;flex-wrap:wrap;gap:6px;padding:9px 15px;border-top:1px solid rgba(232,194,74,.18);background:rgba(232,194,74,.05)}
+.ops-issues span{color:var(--gold);font-size:11px}
+
 /* nav */
 .chase-header{position:sticky;top:0;z-index:50;background:rgba(8,9,15,.82);
 backdrop-filter:blur(14px);border-bottom:1px solid var(--border-soft)}
@@ -102,6 +120,18 @@ font-variant-numeric:tabular-nums;color:var(--text);flex:0 0 auto;padding:0 2px;
 .game-mid{display:flex;flex-direction:column;align-items:center;gap:3px;padding:0 6px}
 .game-at{color:var(--text-4);font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.16em}
 .game-when{color:var(--text-3);font-size:11px;white-space:nowrap}
+
+/* The configured sportsbook quote is first-class, not hidden in a disclosure. */
+.quote{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:18px;padding:10px 16px;
+border-top:1px solid var(--border-soft);background:rgba(124,77,255,.065)}
+.quote-source{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:8px;min-width:0}
+.quote-source b{font-family:var(--display);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.quote-source small{grid-column:2;color:var(--text-3);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.quote-val{text-align:right;min-width:78px}
+.quote-val span{display:block;color:var(--text-3);font-size:9.5px;text-transform:uppercase;letter-spacing:.09em}
+.quote-val strong{display:block;font-family:var(--display);font-size:18px;font-variant-numeric:tabular-nums}
+.quote--missing{grid-template-columns:1fr;background:rgba(242,84,91,.035)}
+.quote--missing .quote-source{grid-template-columns:1fr}.quote--missing .quote-source small{grid-column:1}
 
 /* numbers strip: three equal columns, mirrored around the centre */
 .game-nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border-soft);
@@ -205,6 +235,12 @@ footer p+p{margin-top:8px}
   .side-score{font-size:22px}
   .gn{padding:10px 4px}
   .authority-gates .gate{max-width:100%;overflow-wrap:anywhere}
+  .ops-grid{grid-template-columns:1fr 1fr}
+  .ops-grid>div:nth-child(2){border-right:0}
+  .ops-grid>div:nth-child(-n+2){border-bottom:1px solid var(--border-soft)}
+  .ops-head span:last-child{display:none}
+  .quote{gap:8px;padding:9px 11px}
+  .quote-val{min-width:62px}.quote-val strong{font-size:16px}
   .bd-row,.bd-head-row{grid-template-columns:1fr auto auto auto;gap:6px;font-size:11.5px}
   .bd-a,.bd-h,.bd-c{min-width:48px}
   .bd-head-row span:not(:first-child){min-width:48px}

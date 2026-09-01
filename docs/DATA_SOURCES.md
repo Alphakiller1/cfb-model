@@ -18,22 +18,21 @@ feature silently degrading to a league-average constant.
 | Recruiting talent | `/talent` | `talent` |
 | Returning production (blended) | `/player/returning` | `percentPPA` |
 | Recruiting class | `/recruiting/teams` | `points` |
+| Quarterback returning production | `/player/returning` | `percentPassingPPA` |
+| Transfer portal net and churn | `/player/portal` | `origin`, `destination`, `rating`, `stars` |
+| First-year coach and stable philosophy shifts | `/coaches` + `/stats/season/advanced` | `seasons[]`, tempo, pass rate, havoc |
 | Opponent-adjusted efficiency | `/stats/game/advanced` | `offense`, `defense` |
 | Market | `/lines` | `spread`, `overUnder` |
+| Live single-book quote | The Odds API `/v4/sports/americanfootball_ncaaf/odds` | DraftKings spread, total, update time |
 
-## Wired, awaiting a fit
+## Wired research candidates
 
-Added 2026-08-27. Each is a *candidate*: `cli fit-preseason` scores it
-leave-one-season-out and only a feed that lowers held-out error earns a
-coefficient in `preseason.COEFFICIENTS`. Until then they change nothing.
+Roster and coaching candidates were fitted on 2026-08-27; the stable terms are
+now in `preseason.EXTRA_COEFFICIENTS`. The table preserves the design rationale.
+Venue effects remain candidates and do not alter a forecast.
 
 | Feature | Endpoint | Field | Why it matters |
 | --- | --- | --- | --- |
-| Quarterback returning production | `/player/returning` | `percentPassingPPA` | Two teams can return the same *blended* production with opposite quarterback situations. The blend cannot tell them apart; this is on a call the model already makes, so it is free. |
-| Transfer portal net | `/player/portal` | `origin`, `destination`, `rating`, `stars` | Declared in `matrix.TALENT_WEIGHTS` at 0.25 since the scaffold and never fetched. Summed by player quality, not headcount. |
-| Portal churn | `/player/portal` | as above | Volume of turnover, separate from its net quality. |
-| First-year head coach | `/coaches` | `seasons[].school`, `seasons[].year` | A new staff invalidates part of what last season's margins measured. Contiguous tenure, so a returning coach is correctly a first year. |
-| Coaching philosophy shift | `/coaches` + `/stats/season/advanced` | `tempo`, `pass_rate`, `explosiveness`, `havoc` | The predictive content is *which* coach arrived. Carries the hire's tendency profile from his previous school and measures how far the scheme is expected to move. |
 | Venue elevation / travel / body clock | `/venues`, `/games` | `elevation` (metres, string), `latitude`, `longitude`, `venueId` | `HOME_FIELD_POINTS` is one 4.53-point constant for all 136 programmes. A sea-level dome and a 7,220-foot stadium two time zones from the visitor are not the same number. |
 
 ## Not reachable from CFBD
@@ -84,13 +83,8 @@ The realistic paths, in order of cost:
 
 ## The order worth doing
 
-1. **Run `cli fit-preseason`.** Quarterback returning production and the portal
-   are wired and cost nothing extra to fetch. If they lower held-out error,
-   adopt them; if not, that is a result.
-2. **Tier and conference terms, and FCS stratification.** No new feed needed.
-   After rescaling, residuals still split P4-vs-G5 −3.29 against G5-vs-G5 +3.55
-   — a ~6.8-point gap driven by all FCS opponents sharing one pooled rating.
-   This improves MAE *and* calibration rather than trading one for the other.
-3. **Venue home field.** Wired, needs the fit.
-4. **Buy charting or injury data, or accept the gap and say so.** The one thing
+1. **Maintain the forward shadow record.** Historical improvements do not
+   establish 2026 performance; every pre-kickoff quote now enters the ledger.
+2. **Venue home field.** Wired, needs the fit.
+3. **Buy charting or injury data, or accept the gap and say so.** The one thing
    not worth doing is pretending a proxy closes it.

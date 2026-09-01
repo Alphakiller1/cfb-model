@@ -8,7 +8,9 @@ from cfbmodel.sources import cfbd
 @pytest.fixture
 def cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(cfbd, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(cfbd, "RUNTIME_CACHE_DIR", tmp_path / "runtime")
     monkeypatch.setattr(cfbd, "_load_env_key", lambda: "test-key")
+    cfbd.clear_run_state()
     return tmp_path
 
 
@@ -82,3 +84,31 @@ def test_closed_season_is_cacheable(monkeypatch):
     monkeypatch.setattr(cfbd, "_current_season", lambda: 2026)
     assert cfbd._season_is_closed(2025) is True
     assert cfbd._season_is_closed(2026) is False
+
+
+def test_nested_game_schema_is_normalised():
+    row = cfbd._normalise_game({
+        "status": "completed", "neutralSite": True,
+        "homeTeam": {"name": "A", "points": 31, "classification": "fbs",
+                     "conference": "ACC"},
+        "awayTeam": {"name": "B", "points": 20, "classification": "fbs",
+                     "conference": "SEC"},
+        "venue": {"id": 9, "name": "Test"},
+    })
+    assert row["homeTeam"] == "A" and row["awayTeam"] == "B"
+    assert row["homePoints"] == 31 and row["completed"] is True
+    assert row["homeClassification"] == "fbs" and row["venueId"] == 9
+
+
+def test_games_requests_only_the_fbs_classification(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cfbd, "get", lambda path, **kwargs: seen.append(path) or [])
+    cfbd.games(2026, week=2)
+    assert seen == ["/games?year=2026&seasonType=regular&classification=fbs&week=2"]
+
+
+def test_nonempty_live_response_is_memoised_within_a_build(cache_dir, monkeypatch):
+    calls = _stub_response(monkeypatch, [{"team": "Georgia"}])
+    assert cfbd.get("/live?year=2026", cacheable=False)
+    assert cfbd.get("/live?year=2026", cacheable=False)
+    assert calls["n"] == 1

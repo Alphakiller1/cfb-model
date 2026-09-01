@@ -74,10 +74,9 @@ def test_book_line_without_a_spread_has_no_margin():
     assert line.home_margin is None
 
 
-def test_fanatics_is_first_in_the_preference_order():
-    """It is not offered for NCAAF today; being first means it is used the moment
-    the API carries it, with no code change."""
-    assert oddsapi.PREFERRED_BOOKS[0] == "fanatics"
+def test_draftkings_is_the_production_default():
+    assert oddsapi.PREFERRED_BOOKS[0] == "draftkings"
+    assert oddsapi.DEFAULT_BOOK == "draftkings"
 
 
 def test_preferred_book_wins_over_feed_order():
@@ -85,13 +84,18 @@ def test_preferred_book_wins_over_feed_order():
     assert oddsapi._pick_book(books)["key"] == "fanduel"
 
 
-def test_unknown_book_is_still_used_rather_than_dropped():
+def test_unknown_book_is_dropped_instead_of_mislabelled():
     books = [{"key": "someneworbook", "title": "New Book"}]
-    assert oddsapi._pick_book(books)["key"] == "someneworbook"
+    assert oddsapi._pick_book(books) is None
 
 
 def test_no_bookmakers_yields_none():
     assert oddsapi._pick_book([]) is None
+
+
+def test_exact_book_lock_never_falls_through_to_another_book():
+    books = [{"key": "fanduel", "title": "FanDuel"}]
+    assert oddsapi._pick_book(books, ("draftkings",)) is None
 
 
 def test_bookmaker_env_locks_the_api_request(monkeypatch):
