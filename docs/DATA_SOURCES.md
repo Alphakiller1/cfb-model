@@ -25,6 +25,12 @@ feature silently degrading to a league-average constant.
 | Market | `/lines` | `spread`, `overUnder` |
 | Live single-book quote | The Odds API `/v4/sports/americanfootball_ncaaf/odds` | DraftKings spread, total, update time |
 
+Closed-season advanced-stat responses used for coaching-style priors are
+immutable. Production carries the exact 2023–2025 CFBD responses for those
+three queries so a transient provider timeout cannot erase a fitted preseason
+feature; current-season schedules, rosters, and prices are never bundled this
+way and must pass the live freshness gate.
+
 ## Wired research candidates
 
 Roster and coaching candidates were fitted on 2026-08-27; the stable terms are

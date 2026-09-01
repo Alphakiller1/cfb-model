@@ -19,9 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from cfbmodel import site  # noqa: E402
 from cfbmodel.sources import cfbd  # noqa: E402
 
-# CFB week 1 opens in the last week of August. Weeks are capped at 15 so a
-# post-season run does not ask CFBD for a week that does not exist.
-SEASON_START_MONTH, SEASON_START_DAY = 8, 24
+# Week 1 moves with the calendar. Anchor the fallback to Labor Day rather than
+# a fixed August date. Weeks are capped at 15 so a postseason run does not ask
+# CFBD for a nonexistent regular-season week.
 MAX_WEEK = 15
 
 
@@ -31,7 +31,9 @@ def current_season(now: dt.datetime) -> int:
 
 
 def current_week(now: dt.datetime, season: int) -> int:
-    start = dt.datetime(season, SEASON_START_MONTH, SEASON_START_DAY, tzinfo=dt.timezone.utc)
+    september_first = dt.datetime(season, 9, 1, tzinfo=dt.timezone.utc)
+    labor_day = september_first + dt.timedelta(days=(7 - september_first.weekday()) % 7)
+    start = labor_day - dt.timedelta(days=7)
     return max(1, min(MAX_WEEK, ((now - start).days // 7) + 1))
 
 
