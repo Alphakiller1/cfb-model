@@ -31,6 +31,12 @@ three queries so a transient provider timeout cannot erase a fitted preseason
 feature; current-season schedules, rosters, and prices are never bundled this
 way and must pass the live freshness gate.
 
+Runtime freshness is age-based, not request-result-based. A failed retry may use
+a last-good snapshot without degrading the board only while it is under its
+source SLA: 30 minutes for CFBD consensus lines, six hours for games and game
+statistics, and 24 hours for roster/coaching priors. Beyond those limits the
+manifest marks the input stale and production verification refuses deployment.
+
 ## Wired research candidates
 
 Roster and coaching candidates were fitted on 2026-08-27; the stable terms are

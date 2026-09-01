@@ -158,6 +158,20 @@ def _stale_limit(path: str) -> int:
     return 30 * 24 * 60 * 60
 
 
+def _fresh_limit(path: str) -> int:
+    """Age at which a last-good snapshot becomes operationally stale.
+
+    A failed retry does not make a five-minute-old roster or schedule fact old.
+    Freshness is a property of the observation age, while `_stale_limit` is the
+    wider emergency window in which a degraded board may still be rendered.
+    """
+    if path.startswith("/lines"):
+        return 30 * 60
+    if path.startswith("/games") or path.startswith("/stats/game"):
+        return 6 * 60 * 60
+    return 24 * 60 * 60
+
+
 def _read_runtime(path: str, *, max_age: int) -> tuple[list | dict, str] | None:
     snapshot = _runtime_path(path)
     if not snapshot.is_file():
@@ -245,8 +259,12 @@ def get(path: str, *, cacheable: bool = True,
         )
         if fallback is not None:
             data, fetched_at = fallback
+            moment = _parse_stamp(fetched_at)
+            age = ((_utc_now() - moment).total_seconds() if moment else float("inf"))
+            is_stale = age > _fresh_limit(path)
             _MEMORY[path] = data
-            _record(path, "stale_snapshot", data, fetched_at=fetched_at, stale=True,
+            _record(path, "stale_snapshot" if is_stale else "cached_snapshot", data,
+                    fetched_at=fetched_at, stale=is_stale,
                     error=f"{type(last).__name__}: {last}")
             return data
         message = f"CFBD request failed after {request_attempts} attempts: {path} ({last})"

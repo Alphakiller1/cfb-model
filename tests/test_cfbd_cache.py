@@ -129,3 +129,22 @@ def test_failed_endpoint_is_not_retried_again_in_same_build(cache_dir, monkeypat
             cfbd.get("/player/portal?year=2026", cacheable=False)
     assert calls["n"] == 1
     assert cfbd.status_report()[0]["state"] == "error"
+
+
+def test_recent_last_good_snapshot_remains_fresh_after_retry_failure(cache_dir, monkeypatch):
+    path = "/player/portal?year=2026"
+    cfbd._atomic_write(cfbd._runtime_path(path), {
+        "path": path,
+        "fetched_at": cfbd._stamp(),
+        "data": [{"origin": "A", "destination": "B"}],
+    })
+    monkeypatch.setattr(cfbd, "RETRIES", 1)
+    monkeypatch.setattr(
+        cfbd.urllib.request, "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(urllib.error.URLError("provider down")),
+    )
+
+    assert cfbd.get(path, cacheable=False)
+    status = cfbd.status_report()[0]
+    assert status["state"] == "cached_snapshot"
+    assert status["stale"] is False
