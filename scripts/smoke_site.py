@@ -31,6 +31,9 @@ BRAND = ("#08090F", "#9A6BFF", "DM Sans", "Roboto Condensed", "chase-wordmark")
 # Nothing may claim betting authority while the gate says RESEARCH_ONLY.
 FORBIDDEN = ("may_bet = true", ">BET<")
 
+# Forked brand tokens must not reach the rendered page.
+FORBIDDEN_BRAND = ("#B794FF", "IBM Plex", "#BA008E", "Barlow")
+
 
 def _grab(block: str, label: str) -> float | None:
     m = re.search(re.escape(label) + r"[^<]*</span>.*?class=\"bd-c[^\"]*\">([+-]?[\d.]+)</span>",
@@ -84,6 +87,9 @@ def main() -> int:
     for key in FORBIDDEN:
         if key in html:
             failures.append(f"page claims authority it does not have: {key!r}")
+    for key in FORBIDDEN_BRAND:
+        if key in html:
+            failures.append(f"off-brand token resurfaced: {key!r}")
 
     # A board with no games means the data step silently produced nothing.
     games = html.count('<article class="game">')
