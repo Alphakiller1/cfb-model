@@ -4,10 +4,14 @@ on:
   push:
     branches: [main]
   schedule:
-    # Twice daily Tuesday-Saturday in season. One DraftKings request carries
-    # both spreads and totals (2 credits); the free /sports preflight protects
-    # the quota floor.
+    # In-week paid DraftKings refresh (existing). One request carries spreads
+    # and totals; the free /sports preflight protects the quota floor.
     - cron: "10 14,21 * * 2-6"
+    # After Saturday: Sunday grades the completed week from cached CFBD + last
+    # good odds. Monday advances the board onto the new week. Neither run
+    # spends Odds-API credits (CFB_REUSE_ODDS_CACHE).
+    - cron: "40 15 * * 0"
+    - cron: "40 15 * * 1"
   workflow_dispatch:
     inputs:
       season:
@@ -49,13 +53,24 @@ jobs:
           restore-keys: |
             cfb-runtime-${{ runner.os }}-
 
+      - name: Select odds policy
+        run: |
+          case "${{ github.event.schedule }}" in
+            "40 15 * * 0"|"40 15 * * 1")
+              echo "CFB_REQUIRE_LIVE_ODDS=0" >> "$GITHUB_ENV"
+              echo "CFB_REUSE_ODDS_CACHE=1" >> "$GITHUB_ENV"
+              echo "Sunday/Monday rebuild: reuse cached odds, no Odds-API spend."
+              ;;
+            *)
+              echo "CFB_REQUIRE_LIVE_ODDS=1" >> "$GITHUB_ENV"
+              ;;
+          esac
       - name: Build dashboard
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           # Production is single-book and fails closed if no slate line verifies.
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           ODDS_BOOKMAKERS: draftkings
-          CFB_REQUIRE_LIVE_ODDS: "1"
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
           IN_SEASON: ${{ github.event.inputs.season }}
