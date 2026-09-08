@@ -104,7 +104,7 @@ def test_bookmaker_env_locks_the_api_request(monkeypatch):
     monkeypatch.setenv("ODDS_BOOKMAKERS", "fanduel")
     monkeypatch.setattr(oddsapi, "remaining", lambda: 100)
 
-    def fake_get(path, params):
+    def fake_get(path, params, **_kwargs):
         captured.update(params)
         return [], {}
 
@@ -112,3 +112,23 @@ def test_bookmaker_env_locks_the_api_request(monkeypatch):
 
     assert oddsapi.fetch_lines(META) == {}
     assert captured["bookmakers"] == "fanduel"
+
+
+def test_reuse_cache_skips_quota_preflight_and_live_fetch(monkeypatch):
+    monkeypatch.setenv("CFB_REUSE_ODDS_CACHE", "1")
+    monkeypatch.setenv("ODDS_BOOKMAKERS", "draftkings")
+
+    def boom_remaining():
+        raise AssertionError("reuse must not call remaining() /sports")
+
+    monkeypatch.setattr(oddsapi, "remaining", boom_remaining)
+
+    calls = []
+
+    def fake_get(path, params, **kwargs):
+        calls.append(kwargs)
+        return [], {"source": "cache", "fetched_at": "2026-09-06T21:10:00Z"}
+
+    monkeypatch.setattr(oddsapi, "_get", fake_get)
+    assert oddsapi.fetch_lines(META) == {}
+    assert calls == [{"network": False}]

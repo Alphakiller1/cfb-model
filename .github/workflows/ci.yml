@@ -20,6 +20,8 @@ jobs:
 
       - name: Tests
         run: python -m pytest -q
+      - name: published Chase tokens vs vendor seed
+        run: python scripts/check_published_tokens.py
 
       - name: Import smoke
         run: |

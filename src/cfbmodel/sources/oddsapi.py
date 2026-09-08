@@ -102,7 +102,8 @@ def _cache_path(url: str) -> Path:
     return CACHE_DIR / (hashlib.sha256(url.encode()).hexdigest()[:20] + ".json")
 
 
-def _get(path: str, params: dict, *, ttl: int = CACHE_TTL_SECONDS) -> tuple[list | dict, dict]:
+def _get(path: str, params: dict, *, ttl: int = CACHE_TTL_SECONDS,
+         network: bool = True) -> tuple[list | dict, dict]:
     key = _load_key()
     if not key:
         raise MissingKey(
@@ -111,7 +112,10 @@ def _get(path: str, params: dict, *, ttl: int = CACHE_TTL_SECONDS) -> tuple[list
         )
     url = f"{BASE}{path}?" + urllib.parse.urlencode({**params, "apiKey": key})
     cached = _cache_path(url)
-    if ttl and cached.is_file() and (time.time() - cached.stat().st_mtime) < ttl:
+    if cached.is_file() and (
+        not network
+        or (ttl and (time.time() - cached.stat().st_mtime) < ttl)
+    ):
         try:
             payload = json.loads(cached.read_text(encoding="utf-8"))
             headers = dict(payload.get("headers", {}))
@@ -122,6 +126,8 @@ def _get(path: str, params: dict, *, ttl: int = CACHE_TTL_SECONDS) -> tuple[list
             return payload["data"], headers
         except (json.JSONDecodeError, KeyError):
             cached.unlink(missing_ok=True)
+    if not network:
+        raise OddsAPIError("no cached odds snapshot to reuse")
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
             data = json.load(resp)
@@ -259,8 +265,9 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
             "The CFB board is single-book; set ODDS_BOOKMAKERS to exactly one sportsbook."
         )
     requested_book = requested[0]
-    left = remaining()
-    if left is not None and left < min_remaining:
+    reuse = os.getenv("CFB_REUSE_ODDS_CACHE", "").lower() in {"1", "true", "yes"}
+    left = None if reuse else remaining()
+    if not reuse and left is not None and left < min_remaining:
         _LAST_STATUS = OddsStatus(
             "quota_floor", requested_book, None, left, 0, 0, 0,
             error=f"only {left} credits left (floor {min_remaining})",
@@ -274,7 +281,7 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
         "bookmakers": requested_book,
     }
     try:
-        data, headers = _get(f"/sports/{SPORT}/odds", query)
+        data, headers = _get(f"/sports/{SPORT}/odds", query, network=not reuse)
     except Exception as exc:
         _LAST_STATUS = OddsStatus(
             "error", requested_book, None, left, 0, 0, 0,

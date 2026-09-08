@@ -1,4 +1,5 @@
-/* CFB board kernel. Extends the vendored Chase tokens; never redefines them. */
+/* CFB board kernel. Extends the vendored Chase tokens; never redefines them.
+ * Sport-specific — not byte-identical to MLB/WNBA/NFL board.css. Tokens are shared. */
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;scroll-padding-top:78px}
