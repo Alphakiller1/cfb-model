@@ -37,8 +37,44 @@ def current_week(now: dt.datetime, season: int) -> int:
     return max(1, min(MAX_WEEK, ((now - start).days // 7) + 1))
 
 
+def first_unfinished_week(season: int) -> int | None:
+    """The first regular-season week that still has an unplayed game.
+
+    CFBD's calendar keeps a week "current" for a grace day past its endDate, so
+    on Tue Sep 8 2026 it still answered week 1 -- a window that ran Aug 29 to
+    Sep 7 and was fully played. Publishing that shows a finished slate as the
+    current one, and a finished week has no live book lines left, so the
+    production guard in site.build fails the deploy outright.
+
+    Keys off `completed` rather than a missing score: two 2026 week-1 games
+    against non-D1 opposition are flagged completed with no points recorded, so
+    "first week with an unscored game" would pin to week 1 all season.
+
+    Returns None when the schedule cannot be read, so a CFBD outage degrades to
+    the calendar rule instead of failing the build.
+    """
+    try:
+        games = cfbd.games(season)
+    except Exception as exc:  # noqa: BLE001 - any source failure degrades, not fails
+        print(f"schedule lookup unavailable ({exc}); using the calendar rule")
+        return None
+    unfinished = [int(g["week"]) for g in games
+                  if g.get("week") is not None and not g.get("completed")]
+    if not unfinished:
+        return None
+    return max(1, min(MAX_WEEK, min(unfinished)))
+
+
 def official_week(now: dt.datetime, season: int) -> int:
-    """Resolve the week from CFBD's calendar, with the clock rule as fallback."""
+    """Resolve the week to publish.
+
+    Schedule first (the first week with an unplayed game), then CFBD's calendar,
+    then the clock. The calendar alone will name a completed week during its
+    grace day; the schedule will not.
+    """
+    unfinished = first_unfinished_week(season)
+    if unfinished is not None:
+        return unfinished
     try:
         periods = [p for p in cfbd.calendar(season)
                    if str(p.get("seasonType", "regular")).lower() == "regular"]
