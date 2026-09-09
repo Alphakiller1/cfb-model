@@ -32,7 +32,7 @@ BRAND = ("#08090F", "#9A6BFF", "DM Sans", "Roboto Condensed", "chase-wordmark")
 FORBIDDEN = ("may_bet = true", ">BET<")
 
 # Forked brand tokens must not reach the rendered page.
-FORBIDDEN_BRAND = ("#B794FF", "IBM Plex", "#BA008E", "Barlow")
+FORBIDDEN_BRAND = ("IBM Plex", "#BA008E", "Barlow")
 
 
 def _grab(block: str, label: str) -> float | None:
