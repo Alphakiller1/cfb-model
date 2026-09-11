@@ -29,9 +29,9 @@ Totals, on the same games:
 | Model total | 13.0446 |
 | League-mean total | 13.6544 |
 
-Projected scores are derived from the two: `home = (total + margin) / 2`. They
-inherit the error of both models, so a scoreline is a centre of mass rather than
-a prediction — the total residual SD is 16.36 against an actual SD of 17.14.
+The independent margin and total remain visible for research, but the headline
+score uses the market-anchored predictive forecast described below. It is still
+a centre of mass rather than a literal score call.
 
 ATS where the model disagrees with the spread: **1651–1579–26 = 51.11%**,
 95% CI **[49.39%, 52.84%]**, breakeven 52.38%.
@@ -42,6 +42,30 @@ confidently losing, which is a change in kind. It is still not evidence of an
 edge: an interval containing the bar is what "unproven" looks like, so
 `authority.current()` returns `RESEARCH_ONLY` and `may_bet` is `False`. Full
 evidence: [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
+
+### Predictive forecast update — September 11, 2026
+
+The board now separates the **independent model** from the **best predictive
+forecast**. A nested leave-one-season-out audit on 3,702 games (2021–2025)
+confirmed that the independent margin does not reliably improve the market:
+Week 2 market MAE was 11.4940, the independent model was 12.6197, and a blend
+selected on the other seasons was worse at 11.6108. The headline margin and
+score therefore anchor to the freshest verified DraftKings price. The
+independent estimate remains visible as a diagnostic rather than masquerading
+as the best prediction.
+
+Totals retained a small signal. Week 2 market MAE was 12.5980 and the nested
+blend scored 12.5481; production conservatively keeps 12.5% of the independent
+total disagreement. Week 3 keeps 25%, weeks 5+ keep 17.5%, and the losing Week
+1/Week 4 candidates keep none. These are forecast-composition weights, not
+betting authority.
+
+The same audit found a production data defect: a partial 2026 Week 1 advanced-
+stats response had been frozen before most games were played. The old Week 2
+board used observed efficiency in only 1 of 49 matchups. Current-season past-
+week stats now refresh on every build; the repaired build used complete form in
+49 of 49. See
+[`reports/PREDICTIVE-OVERHAUL-2026-09-11.md`](reports/PREDICTIVE-OVERHAUL-2026-09-11.md).
 
 ### 2026 season-opening audit
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from cfbmodel.forecast import Forecast
 
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "2.0.0"
 DEFAULT_PATH = Path(
     os.getenv(
         "CFB_LEDGER_PATH",
@@ -78,12 +78,18 @@ def _grade(snapshot: dict, result: dict) -> None:
         "actual_total": actual_total,
         "model_abs_error": (abs(float(snapshot["model_margin"]) - actual_margin)
                             if snapshot.get("model_margin") is not None else None),
+        "forecast_abs_error": (abs(float(snapshot["forecast_margin"]) - actual_margin)
+                               if snapshot.get("forecast_margin") is not None else None),
         "consensus_abs_error": (abs(float(snapshot["consensus_margin"]) - actual_margin)
                                 if snapshot.get("consensus_margin") is not None else None),
         "book_abs_error": (abs(float(snapshot["book_margin"]) - actual_margin)
                            if snapshot.get("book_margin") is not None else None),
         "model_total_abs_error": (abs(float(snapshot["model_total"]) - actual_total)
                                   if snapshot.get("model_total") is not None else None),
+        "forecast_total_abs_error": (
+            abs(float(snapshot["forecast_total"]) - actual_total)
+            if snapshot.get("forecast_total") is not None else None
+        ),
         "book_total_abs_error": (abs(float(snapshot["book_total"]) - actual_total)
                                  if snapshot.get("book_total") is not None else None),
     })
@@ -128,10 +134,12 @@ def summary(payload: dict, *, season: int | None = None) -> dict:
         "pending_snapshots": sum(row.get("status") == "pending"
                                  for row in payload.get("snapshots", [])),
         "model_mae": _mean(rows, "model_abs_error"),
+        "forecast_mae": _mean(rows, "forecast_abs_error"),
         "consensus_mae": _mean(rows, "consensus_abs_error"),
         "book_mae": _mean(rows, "book_abs_error"),
         "ats": {name: ats.count(name) for name in ("win", "loss", "push")},
         "model_total_mae": _mean(rows, "model_total_abs_error"),
+        "forecast_total_mae": _mean(rows, "forecast_total_abs_error"),
         "book_total_mae": _mean(rows, "book_total_abs_error"),
         "totals": {name: totals.count(name) for name in ("win", "loss", "push")},
     }
@@ -179,15 +187,19 @@ def update(
             "home": forecast.home,
             "away": forecast.away,
             "kickoff": _stamp(kickoff),
-            "model_lineage": "2026.09-reliability-blended",
+            "model_lineage": "2026.09-predictive-market-ensemble",
             "model_regime": forecast.model_regime,
             "model_margin": forecast.model_margin,
+            "forecast_margin": forecast.margin,
+            "forecast_source": forecast.forecast_source,
             "consensus_margin": forecast.market_margin,
             "book": forecast.book_name,
             "book_margin": forecast.book_margin,
             "book_total": forecast.book_total,
             "book_last_update": forecast.book_last_update,
-            "model_total": forecast.projected_total,
+            "model_total": forecast.independent_total,
+            "forecast_total": forecast.projected_total,
+            "total_model_weight": forecast.total_model_weight,
             "status": "pending",
             "authority": "shadow_only",
         })

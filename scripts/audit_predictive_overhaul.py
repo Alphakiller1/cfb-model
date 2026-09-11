@@ -241,7 +241,7 @@ def observations(seasons: list[int], last_week: int) -> list[Observation]:
                     model_margin=result.model_margin,
                     market_margin=margins[key],
                     actual_total=float(hp + ap),
-                    model_total=result.projected_total,
+                    model_total=result.independent_total,
                     market_total=market_totals.get(key),
                     used_efficiency=result.used_efficiency,
                 ))

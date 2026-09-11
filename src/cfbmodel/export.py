@@ -38,7 +38,7 @@ from cfbmodel import ratings as ratings_mod
 from cfbmodel import teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "3.0.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -63,6 +63,7 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         "model_margin": forecast.model_margin,
         "market_margin": forecast.market_margin,
         "published_margin": forecast.margin,
+        "forecast_source": forecast.forecast_source,
         "edge_points": forecast.edge_points,
         # Always present when both numbers exist. Outside the validated regime
         # this is the information gap, not a disagreement -- `edge_points` is
@@ -71,6 +72,8 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         "edge_withheld_reason": forecast.edge_withheld_reason,
         "win_probability": forecast.win_probability,
         "projected_total": forecast.projected_total,
+        "independent_total": forecast.independent_total,
+        "total_model_weight": forecast.total_model_weight,
         "market_total": forecast.market_total,
         "projected_away_score": forecast.projected_away_score,
         "projected_home_score": forecast.projected_home_score,
@@ -132,6 +135,10 @@ def payload(
             "in_validated_regime": week >= fc.FIRST_VALIDATED_WEEK,
         },
         "lam": fc.DEFAULT_LAM,
+        "total_model_weights": {
+            "by_week": fc.TOTAL_MODEL_WEIGHT_BY_WEEK,
+            "mature": fc.MATURE_TOTAL_MODEL_WEIGHT,
+        },
         "games": [_game(season, forecast, kickoff) for forecast, kickoff in ordered],
     }
 

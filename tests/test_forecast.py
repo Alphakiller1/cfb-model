@@ -159,23 +159,63 @@ def test_forecast_carries_a_projected_scoreline():
     assert f.total_modelled is True
 
 
-def test_scoreline_reflects_the_model_margin_not_the_published_one():
-    """At lam = 0 the published margin is the market. A 'projected score' built
-    from it would be the market's projection wearing the model's label."""
+def test_scoreline_reflects_the_predictive_margin():
+    """The headline score must reconcile to the forecast users are shown."""
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form(),
                 market_margin=1.0)
     assert f.margin == pytest.approx(1.0)          # published = market
     spread = f.projected_home_score - f.projected_away_score
-    assert spread == pytest.approx(f.model_margin)  # scoreline follows the model
-    assert spread != pytest.approx(1.0)
+    assert spread == pytest.approx(f.margin)
+    assert spread == pytest.approx(1.0)
 
 
 def test_total_edge_is_model_minus_market():
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form(),
                 market_total=50.0)
-    assert f.total_edge == pytest.approx(f.projected_total - 50.0)
+    assert f.total_edge == pytest.approx(f.independent_total - 50.0)
+
+
+def test_week_two_total_keeps_only_validated_independent_weight():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(),
+                market_margin=4.0, market_total=50.0, week=2)
+    assert f.total_model_weight == pytest.approx(0.125)
+    assert f.projected_total == pytest.approx(
+        50.0 + 0.125 * (f.independent_total - 50.0)
+    )
+
+
+def test_total_without_market_is_fully_independent():
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(), week=5)
+    assert f.projected_total == pytest.approx(f.independent_total)
+    assert f.total_model_weight == pytest.approx(1.0)
+    assert f.forecast_source == "independent_model"
+
+
+def test_fresh_book_quote_is_the_current_forecast_anchor():
+    book = type("Book", (), {
+        "book_title": "DraftKings", "home_margin": 6.5, "total": 48.5,
+        "last_update": "2026-09-11T16:00:00Z", "commence_time": None,
+    })()
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                market_margin=5.0, market_total=50.0, book=book, week=2)
+    assert f.margin == pytest.approx(6.5)
+    assert f.forecast_source == "draftkings"
+    assert f.market_gap == pytest.approx(f.model_margin - 6.5)
+
+
+def test_total_gap_uses_fresh_book_before_consensus():
+    book = type("Book", (), {
+        "book_title": "DraftKings", "home_margin": 6.5, "total": 48.5,
+        "last_update": "2026-09-11T16:00:00Z", "commence_time": None,
+    })()
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(),
+                market_total=50.0, book=book, week=2)
+    assert f.total_edge == pytest.approx(f.independent_total - 48.5)
 
 
 def test_total_edge_is_none_without_a_market_total():

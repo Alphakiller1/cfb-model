@@ -185,7 +185,7 @@ def _authority_block(authority: auth_mod.Authority) -> str:
 
 def _tiles() -> str:
     data = [
-        ("12.5423", "Updated model MAE", "1,548 games · weeks 1–6 · 2021–2025"),
+        ("12.5423", "Independent model MAE", "1,548 games · weeks 1–6 · 2021–2025"),
         ("11.8741", "Market MAE", "same games · market remains better"),
         ("52.42%", "ATS disagreements", "95% CI [49.91, 54.92] · still unproven"),
         ("62.5%", "Underdog-side share", "69.2% before transition calibration"),
@@ -222,9 +222,16 @@ def _health_block(health: dict | None, record: dict | None) -> str:
     remaining_label = "—" if remaining is None else remaining
     graded = (record or {}).get("games_graded", 0)
     model_mae = (record or {}).get("model_mae")
+    forecast_mae = (record or {}).get("forecast_mae")
     record_value = f"{graded} games" if graded else "collecting"
-    record_note = (f"shadow MAE {model_mae:.2f}" if model_mae is not None
-                   else "latest pre-kickoff snapshots")
+    if forecast_mae is not None:
+        record_note = f"forecast MAE {forecast_mae:.2f}"
+        if model_mae is not None:
+            record_note += f" · independent {model_mae:.2f}"
+    elif model_mae is not None:
+        record_note = f"independent MAE {model_mae:.2f}"
+    else:
+        record_note = "latest pre-kickoff snapshots"
     issues = health.get("issues") or []
     issue_html = "" if not issues else (
         '<div class="ops-issues">' + "".join(f"<span>{esc(issue)}</span>" for issue in issues)
@@ -311,15 +318,11 @@ def _projection_rows(row: Row, season: int) -> str:
                      if f.model_regime == "transition_blend" else "Raw preseason prior")
         out.append(_bd_row(raw_label, None, None,
                            f.raw_model_margin, kind="bd-row--total"))
-    if f.projected_total is not None:
-        basis_label = {
-            "preseason_scoring_prior": " (preseason scoring prior)",
-        }.get(f.total_basis, "")
-        label = "Projected total" + basis_label
+    if f.independent_total is not None:
         out.append(
-            f'<div class="bd-row"><span class="bd-k">{esc(label)}</span>'
+            f'<div class="bd-row"><span class="bd-k">Independent model total</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
-            f'<span class="bd-c">{f.projected_total:.1f}</span></div>')
+            f'<span class="bd-c">{f.independent_total:.1f}</span></div>')
     if f.market_total is not None:
         out.append(
             f'<div class="bd-row"><span class="bd-k">Market total (consensus)</span>'
@@ -339,9 +342,16 @@ def _projection_rows(row: Row, season: int) -> str:
             f'<div class="bd-row"><span class="bd-k">Live book total{esc(book)}</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
             f'<span class="bd-c">{f.book_total:.1f}</span></div>')
+    if f.projected_total is not None:
+        blend = (f" ({f.total_model_weight:.0%} independent signal)"
+                 if f.total_model_weight else " (market-only)")
+        out.append(
+            f'<div class="bd-row bd-row--total"><span class="bd-k">Predictive total{esc(blend)}</span>'
+            f'<span class="bd-a"></span><span class="bd-h"></span>'
+            f'<span class="bd-c">{f.projected_total:.1f}</span></div>')
     if f.projected_home_score is not None:
         out.append(
-            f'<div class="bd-row bd-row--total"><span class="bd-k">Projected score</span>'
+            f'<div class="bd-row bd-row--total"><span class="bd-k">Predictive score</span>'
             f'<span class="bd-a">{f.projected_away_score:.0f}</span>'
             f'<span class="bd-h">{f.projected_home_score:.0f}</span>'
             f'<span class="bd-c"></span></div>')
@@ -491,8 +501,11 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
         "REVIEW": "badge-review", "AVOID": "badge-avoid",
     }.get(f.action.value, "badge-avoid")
     total_star = ""
-    if f.market_total is not None:
-        total_sub = f"mkt {f.market_total:.1f}"
+    if f.book_total is not None:
+        total_sub = (f"{f.total_model_weight:.0%} model signal"
+                     if f.total_model_weight else "DraftKings")
+    elif f.market_total is not None:
+        total_sub = f"consensus {f.market_total:.1f}"
     elif f.total_basis == "preseason_scoring_prior":
         total_sub = "preseason prior"
     else:
@@ -500,7 +513,7 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
     gap_sub = ('<span class="gn-sub">not an edge</span>'
                if f.edge_points is None and f.market_gap is not None else "")
     note = "model only — no market price" if not f.has_price else (
-        "published margin = market at lam 0")
+        f"predictive forecast anchored to {f.forecast_source.replace('_', ' ')}")
     if f.edge_withheld_reason:
         note = esc(f.edge_withheld_reason)
     elif not f.used_efficiency:
@@ -542,10 +555,11 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
 </div>
 {quote}
 <div class="game-nums">
-<div class="gn"><span class="gn-l">Model</span>
+<div class="gn"><span class="gn-l">Independent</span>
 <span class="gn-v{"" if f.model_margin is not None else " gn-v--na"}">{_fmt(f.model_margin)}</span></div>
-<div class="gn"><span class="gn-l">Market</span>
-<span class="gn-v{"" if f.market_margin is not None else " gn-v--na"}">{_fmt(f.market_margin)}</span></div>
+<div class="gn"><span class="gn-l">Forecast</span>
+<span class="gn-v{"" if f.margin is not None else " gn-v--na"}">{_fmt(f.margin)}</span>
+<span class="gn-sub">{esc(f.forecast_source.replace('_', ' '))}</span></div>
 <div class="gn"><span class="gn-l">Total</span>
 <span class="gn-v{"" if f.projected_total is not None else " gn-v--na"}">{_fmt(f.projected_total, sign=False)}{total_star}</span>
 <span class="gn-sub">{total_sub}</span></div>
@@ -684,11 +698,17 @@ drives and plays per game. CFB tempo varies far more than the NFL&rsquo;s.</p>
 <tr><td>Model total</td><td>13.0446</td></tr>
 <tr><td>Market total</td><td>12.5055</td></tr>
 <tr><td>Total residual SD</td><td>{totals.TOTAL_SD:.2f}</td></tr></table>
-<p>Scores are algebra on the two projections: home = (total + margin) / 2. They inherit
-the error of <em>both</em> models, so read a scoreline as a centre of mass, not a
-prediction. Weeks 1–4 use a separately fitted prior from each team&rsquo;s previous-season
-scoring and defensive allowance. A total marked <b>*</b> is only the emergency league-mean
-fallback, not a modelled figure.</p></div>
+<p>The headline score is algebra on the best predictive margin and total. The margin
+uses the freshest timestamp-verified DraftKings line because the independent model did
+not improve it in season-held-out testing. Totals retain only the small independent share
+that survived the same test. The full independent estimates remain visible as diagnostics.</p></div>
+
+<div class="mth-card"><div class="mth-h">Predictive ensemble</div>
+<p>A nested leave-one-season-out audit covered 3,702 games from 2021–2025. In Week 2,
+market margin MAE was 11.49 versus 12.62 for the independent model; a trained blend was
+worse at 11.61, so the headline margin is market-only. Week 2 totals improved from 12.60
+to 12.55 with a small model share; the production weight is conservatively capped at
+12.5%. These weights affect the predictive score, never the research-only authority.</p></div>
 
 <div class="mth-card"><div class="mth-h">Point-in-time</div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
@@ -775,10 +795,10 @@ timestamped shadow record.</p>
 <section id="board">
 <div class="sec-eyebrow">01 · Slate</div>
 <h2 class="sec-title">Week {esc(week)} Board</h2>
-<p class="sec-blurb">Model margin is the home side. The published margin equals the market
-at lam&nbsp;=&nbsp;0, because the model does not beat the closing line — the model column is
-shown so the disagreement is visible, not so it can be traded. Expand any game for the
-factor-by-factor breakdown.</p>
+<p class="sec-blurb">Forecast margin is the home side and anchors to the freshest verified
+DraftKings quote. Independent is the model&rsquo;s price-free estimate, retained for diagnosis;
+it is not substituted for the stronger market estimate. The displayed score reconciles to
+the forecast margin and predictive total. Expand any game for the full breakdown.</p>
 {early_notice}
 <div class="games">{cards}</div>
 </section>

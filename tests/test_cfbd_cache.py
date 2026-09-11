@@ -165,3 +165,31 @@ def test_recent_last_good_snapshot_remains_fresh_after_retry_failure(cache_dir, 
     status = cfbd.status_report()[0]
     assert status["state"] == "cached_snapshot"
     assert status["stale"] is False
+
+
+def test_rate_limit_honors_retry_after(cache_dir, monkeypatch):
+    attempts = {"n": 0}
+    sleeps = []
+    payload = [{"team": "Georgia"}]
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def sometimes_limited(*args, **kwargs):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise urllib.error.HTTPError(
+                "https://example.test", 429, "limited",
+                {"Retry-After": "12"}, None,
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr(cfbd.urllib.request, "urlopen", sometimes_limited)
+    monkeypatch.setattr(cfbd.json, "load", lambda response: payload)
+    monkeypatch.setattr(cfbd.time, "sleep", sleeps.append)
+    assert cfbd.get("/games?year=2025", attempts=2) == payload
+    assert sleeps == [12.0]

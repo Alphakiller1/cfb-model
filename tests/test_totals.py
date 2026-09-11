@@ -113,3 +113,10 @@ def test_scores_never_go_negative():
 def test_negative_margin_favours_the_away_side():
     p = totals.project(-10.0, _form(), _form())
     assert p.away_score > p.home_score
+
+
+def test_scoreline_accepts_an_already_selected_forecast():
+    p = totals.scoreline(7.0, 51.0, modelled=True, basis="draftkings_anchored")
+    assert p.home_score - p.away_score == pytest.approx(7.0)
+    assert p.home_score + p.away_score == pytest.approx(51.0)
+    assert p.basis == "draftkings_anchored"

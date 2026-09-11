@@ -243,10 +243,10 @@ def cmd_board(args: argparse.Namespace) -> int:
             tot = "--"
         flag = "" if f.used_efficiency else "  [ratings-only]"
         print(f"  {when[:22]:<22} {matchup[:40]:<40} {score:>13} {tot:>12} {model:>7} {mkt:>7} {edge:>9}  {f.action.value}{flag}")
-    print(f"\n  {len(rows)} games · score is the MODEL projection (away-home), "
-          f"total column is model/market")
+    print(f"\n  {len(rows)} games · score uses the market-anchored predictive forecast "
+          f"(away-home); model is the independent diagnostic")
     print(f"  (parenthesised) = information gap, not an edge · * = emergency league-mean fallback · "
-          f"published margin equals the market at lam=0\n")
+          f"forecast margin equals the best available market at lam=0\n")
     return 0
 
 

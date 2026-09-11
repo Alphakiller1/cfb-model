@@ -21,7 +21,10 @@ Totals are genuinely hard: the residual SD is 16.36 against an actual total SD o
 stating plainly rather than dressing up, because a projected scoreline looks far
 more precise than it is.
 
-**Projected scores** are just algebra on the two projections:
+**Independent projected scores** are algebra on the two independent projections.
+Production's headline score may instead use a market-anchored predictive total
+and margin; `forecast.py` owns that composition and retains this estimate for
+diagnosis:
 
     home = (total + margin) / 2
     away = (total - margin) / 2
@@ -83,6 +86,25 @@ class Projection:
     away_score: float | None
     modelled: bool
     basis: str = "unavailable"
+
+
+def scoreline(
+    margin: float | None,
+    total: float | None,
+    *,
+    modelled: bool,
+    basis: str,
+) -> Projection:
+    """Turn an already-selected margin and total into a coherent scoreline."""
+    if margin is None or total is None:
+        return Projection(None, None, None, False, "unavailable")
+    home_score = (total + margin) / 2.0
+    away_score = (total - margin) / 2.0
+    if away_score < 0:
+        away_score, home_score = 0.0, total
+    elif home_score < 0:
+        home_score, away_score = 0.0, total
+    return Projection(total, home_score, away_score, modelled, basis)
 
 
 @dataclass(frozen=True)
@@ -202,12 +224,4 @@ def project(
         return Projection(None, None, None, False, "unavailable")
     modelled = True
 
-    # Scores cannot be negative; a huge projected margin against a modest total
-    # would otherwise produce one.
-    home_score = (total + margin) / 2.0
-    away_score = (total - margin) / 2.0
-    if away_score < 0:
-        away_score, home_score = 0.0, total
-    elif home_score < 0:
-        home_score, away_score = 0.0, total
-    return Projection(total, home_score, away_score, modelled, basis)
+    return scoreline(margin, total, modelled=modelled, basis=basis)

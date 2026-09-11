@@ -41,6 +41,7 @@ RUNTIME_CACHE_DIR = Path(
 )
 TIMEOUT = int(os.getenv("CFBD_TIMEOUT_SECONDS", "25"))
 RETRIES = int(os.getenv("CFBD_RETRIES", "2"))
+MAX_RETRY_AFTER_SECONDS = int(os.getenv("CFBD_MAX_RETRY_AFTER_SECONDS", "60"))
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,18 @@ def _read_runtime(path: str, *, max_age: int) -> tuple[list | dict, str] | None:
         return None
 
 
+def _retry_delay(error: Exception | None, attempt: int) -> float:
+    """Back off enough for CFBD's rate-limit window, honoring Retry-After."""
+    if isinstance(error, urllib.error.HTTPError) and error.code == 429:
+        raw = error.headers.get("Retry-After") if error.headers else None
+        try:
+            requested = float(raw) if raw is not None else 10.0 * (attempt + 1)
+        except (TypeError, ValueError):
+            requested = 10.0 * (attempt + 1)
+        return max(1.0, min(requested, MAX_RETRY_AFTER_SECONDS))
+    return 1.5 * (attempt + 1)
+
+
 def get(path: str, *, cacheable: bool = True,
         stale_if_error: int | None = None, timeout: int | None = None,
         attempts: int | None = None) -> list | dict:
@@ -252,7 +265,7 @@ def get(path: str, *, cacheable: bool = True,
         except Exception as exc:  # noqa: BLE001 - network flakiness is retried
             last = exc
         if attempt + 1 < request_attempts:
-            time.sleep(1.5 * (attempt + 1))
+            time.sleep(_retry_delay(last, attempt))
     else:
         fallback = _read_runtime(
             path, max_age=_stale_limit(path) if stale_if_error is None else stale_if_error

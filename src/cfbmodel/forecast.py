@@ -38,6 +38,17 @@ from cfbmodel.authority import Action, Authority, current
 # Fraction of model-vs-market disagreement retained. See module docstring.
 DEFAULT_LAM = 0.0
 
+# Nested leave-one-season-out over 3,702 games found no reliable margin gain
+# from retaining independent disagreement in the headline forecast.  For Week 2
+# specifically, the market scored 11.494 MAE and the trained blend worsened to
+# 11.611.  The predictive margin therefore stays on the freshest verified price.
+#
+# Totals contain a small, stable residual signal.  The only early-week weights
+# shipped here are regimes that beat the market out of sample; unstable or
+# losing regimes remain market-only.  See reports/PREDICTIVE-OVERHAUL-2026-09-11.md.
+TOTAL_MODEL_WEIGHT_BY_WEEK = {1: 0.0, 2: 0.125, 3: 0.25, 4: 0.0}
+MATURE_TOTAL_MODEL_WEIGHT = 0.175
+
 # Correction for the ratings-only fallback. `ratings.projected_margin` runs
 # +2.123 points high for the home side; this is measured directly, and the
 # independently fitted intercept of the old single-regime model matched it to
@@ -90,6 +101,9 @@ class Forecast:
     projected_away_score: float | None = None
     total_modelled: bool = False
     total_basis: str = "unavailable"
+    independent_total: float | None = None
+    total_model_weight: float = 0.0
+    forecast_source: str = "independent_model"
     market_total: float | None = None
     # Live sportsbook line, distinct from the CFBD consensus used as the model's
     # benchmark. Present only when an odds feed is configured and matched.
@@ -101,14 +115,21 @@ class Forecast:
 
     @property
     def has_price(self) -> bool:
-        return self.market_margin is not None
+        return self.book_margin is not None or self.market_margin is not None
 
     @property
     def total_edge(self) -> float | None:
-        """Model total minus market total, or None without both."""
-        if self.projected_total is None or self.market_total is None:
+        """Independent total minus the freshest available market total."""
+        reference = self.book_total if self.book_total is not None else self.market_total
+        if self.independent_total is None or reference is None:
             return None
-        return self.projected_total - self.market_total
+        return self.independent_total - reference
+
+
+def _total_model_weight(week: int | None) -> float:
+    if week is None:
+        return MATURE_TOTAL_MODEL_WEIGHT
+    return TOTAL_MODEL_WEIGHT_BY_WEEK.get(week, MATURE_TOTAL_MODEL_WEIGHT)
 
 
 def _model_margin(
@@ -188,6 +209,7 @@ def game(
     market_total: float | None = None,
     book: object | None = None,
     preseason_total: float | None = None,
+    total_lam: float | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -213,22 +235,48 @@ def game(
     else:
         model_margin = raw_model_margin
 
-    if market_margin is None:
+    book_margin = getattr(book, "home_margin", None)
+    book_total = getattr(book, "total", None)
+    # A timestamp-validated live book quote is the current predictive anchor.
+    # CFBD consensus remains the historical benchmark and the fallback.
+    reference_margin = book_margin if book_margin is not None else market_margin
+    reference_total = book_total if book_total is not None else market_total
+
+    if reference_margin is None:
         published, anchored, market_gap = model_margin, False, None
+        forecast_source = "independent_model"
     else:
         anchored = True
-        market_gap = None if model_margin is None else model_margin - market_margin
-        published = market_margin if market_gap is None else market_margin + lam * market_gap
+        market_gap = None if model_margin is None else model_margin - reference_margin
+        published = (reference_margin if market_gap is None
+                     else reference_margin + lam * market_gap)
+        forecast_source = "draftkings" if book_margin is not None else "cfbd_consensus"
     edge, withheld = _edge(market_gap, used_efficiency=used_efficiency, in_regime=in_regime)
 
     win_p = None if published is None else ratings.win_probability(published)
-    # The scoreline is the MODEL's projection: model margin + model total. It is
-    # deliberately not built from the published margin, which at lam = 0 is just
-    # the market -- a "projected score" that silently restated the market's
-    # number would be the market's projection wearing the model's label. The
-    # board shows the market columns alongside it, so the two stay comparable.
-    projection = totals.project(
+    independent_projection = totals.project(
         model_margin, home_form, away_form, preseason=preseason_total
+    )
+    total_weight = _total_model_weight(week) if total_lam is None else total_lam
+    if reference_total is None:
+        predictive_total = independent_projection.total
+        total_basis = independent_projection.basis
+        # With no market anchor the independent projection is the entire
+        # forecast, regardless of the normal week-specific blend weight.
+        total_weight = 1.0 if predictive_total is not None else 0.0
+    elif independent_projection.total is None:
+        predictive_total = reference_total
+        total_basis = forecast_source
+        total_weight = 0.0
+    else:
+        predictive_total = (reference_total + total_weight
+                            * (independent_projection.total - reference_total))
+        total_basis = f"{forecast_source}_anchored"
+    projection = totals.scoreline(
+        published,
+        predictive_total,
+        modelled=independent_projection.modelled,
+        basis=total_basis,
     )
     return Forecast(
         home=home, away=away, neutral=neutral,
@@ -237,7 +285,7 @@ def game(
         margin=published, win_probability=win_p, edge_points=edge,
         market_gap=market_gap,
         market_anchored=anchored,
-        action=auth.action_for(edge, market_margin is not None),
+        action=auth.action_for(edge, reference_margin is not None),
         authority=auth,
         in_validated_regime=in_regime,
         used_efficiency=used_efficiency,
@@ -251,12 +299,15 @@ def game(
         projected_total=projection.total,
         projected_home_score=projection.home_score,
         projected_away_score=projection.away_score,
-        total_modelled=projection.modelled,
+        total_modelled=independent_projection.modelled,
         total_basis=projection.basis,
+        independent_total=independent_projection.total,
+        total_model_weight=total_weight,
+        forecast_source=forecast_source,
         market_total=market_total,
         book_name=getattr(book, "book_title", None),
-        book_margin=getattr(book, "home_margin", None),
-        book_total=getattr(book, "total", None),
+        book_margin=book_margin,
+        book_total=book_total,
         book_last_update=getattr(book, "last_update", None),
         book_commence_time=getattr(book, "commence_time", None),
     )
