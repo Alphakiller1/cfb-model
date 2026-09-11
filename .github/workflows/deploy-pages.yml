@@ -20,6 +20,9 @@ on:
       week:
         description: "Week to build (blank = auto)"
         required: false
+      prebuilt_run:
+        description: "Verified workflow run ID to promote (blank = build fresh)"
+        required: false
 
 permissions:
   contents: read
@@ -44,6 +47,7 @@ jobs:
         run: pip install .
 
       - name: Restore data snapshots and shadow ledger
+        if: github.event.inputs.prebuilt_run == ''
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -54,6 +58,7 @@ jobs:
             cfb-runtime-${{ runner.os }}-
 
       - name: Select odds policy
+        if: github.event.inputs.prebuilt_run == ''
         run: |
           case "${{ github.event.schedule }}" in
             "40 15 * * 0"|"40 15 * * 1")
@@ -66,6 +71,7 @@ jobs:
               ;;
           esac
       - name: Build dashboard
+        if: github.event.inputs.prebuilt_run == ''
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           # Production is single-book and fails closed if no slate line verifies.
@@ -77,6 +83,21 @@ jobs:
           IN_WEEK: ${{ github.event.inputs.week }}
         run: python scripts/build_current.py --out _site/index.html
 
+      - name: Download verified Pages artifact
+        if: github.event.inputs.prebuilt_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          path: _prebuilt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.inputs.prebuilt_run }}
+
+      - name: Unpack verified Pages artifact
+        if: github.event.inputs.prebuilt_run != ''
+        run: |
+          mkdir -p _site
+          tar -xf _prebuilt/artifact.tar -C _site
+
       - name: Post-build smoke
         run: |
           python scripts/smoke_site.py _site/index.html
@@ -86,7 +107,7 @@ jobs:
       # release gate fails. The next run can then recover through a bounded
       # provider outage without repeating all successful calls.
       - name: Save data snapshots and shadow ledger
-        if: always()
+        if: always() && github.event.inputs.prebuilt_run == ''
         uses: actions/cache/save@v4
         with:
           path: |
