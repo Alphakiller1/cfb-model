@@ -398,15 +398,15 @@ def game_advanced_stats(season: int, *, week: int, exclude_garbage_time: bool = 
     path = f"/stats/game/advanced?year={season}&week={week}"
     if exclude_garbage_time:
         path += "&excludeGarbageTime=true"
-    return get(path, cacheable=_season_is_closed(season) or week < _live_week_guess())
-
-
-def _live_week_guess() -> int:
-    """Rough current week, used only to decide what is safe to cache."""
-    import datetime as _dt
-    now = _dt.datetime.now(_dt.timezone.utc)
-    start = _dt.datetime(now.year if now.month >= 7 else now.year - 1, 8, 24, tzinfo=_dt.timezone.utc)
-    return max(1, ((now - start).days // 7) + 1)
+    # A completed week in the CURRENT season is not immediately immutable.
+    # Providers publish and revise advanced rows after the final whistle.  The
+    # former `week < _live_week_guess()` shortcut permanently cached a partial
+    # Week 1 response on September 1, before most of the 2026 Week 1 slate had
+    # played.  Week 2 then had complete form for only one matchup and silently
+    # fell back to preseason ratings for the other 48 games.  Current-season
+    # rows stay in the bounded runtime cache and are refreshed every build;
+    # only a closed season is safe in the immutable cache.
+    return get(path, cacheable=_season_is_closed(season))
 
 
 def season_game_stats(season: int, *, through_week: int,

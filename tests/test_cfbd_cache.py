@@ -81,6 +81,23 @@ def test_current_season_talent_is_not_cached(monkeypatch):
     assert seen["/talent?year=2024"] is True
 
 
+def test_current_season_completed_week_stats_are_not_frozen(monkeypatch):
+    """Advanced rows arrive after games finish, so even a past week in the
+    active season must refresh instead of becoming an immutable partial file."""
+    monkeypatch.setattr(cfbd, "_current_season", lambda: 2026)
+    seen = {}
+
+    def fake_get(path, *, cacheable=True, **kwargs):
+        seen[path] = cacheable
+        return []
+
+    monkeypatch.setattr(cfbd, "get", fake_get)
+    cfbd.game_advanced_stats(2026, week=1)
+    cfbd.game_advanced_stats(2025, week=14)
+    assert seen["/stats/game/advanced?year=2026&week=1&excludeGarbageTime=true"] is False
+    assert seen["/stats/game/advanced?year=2025&week=14&excludeGarbageTime=true"] is True
+
+
 def test_closed_season_is_cacheable(monkeypatch):
     monkeypatch.setattr(cfbd, "_current_season", lambda: 2026)
     assert cfbd._season_is_closed(2025) is True
