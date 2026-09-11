@@ -50,6 +50,11 @@ class Fold:
     n: int
     selected_weight: float
     mae: float
+    market_mae: float
+
+    @property
+    def delta_vs_market(self) -> float:
+        return self.mae - self.market_mae
 
 
 def _mae(predicted: list[float], actual: list[float]) -> float:
@@ -97,19 +102,28 @@ def nested_blend(rows: list[Observation], target: str) -> dict:
             scored.append((_mae(predictions, actual), weight))
         _, selected = min(scored)
         fold_errors = []
+        fold_market_errors = []
         for row in test:
             market, model, result = _values(row, target)
             error = abs(_blend(market, model, selected) - result)
             fold_errors.append(error)
+            fold_market_errors.append(abs(market - result))
             errors.append(error)
-        folds.append(Fold(held_out, len(test), selected, statistics.fmean(fold_errors)))
+        folds.append(Fold(
+            held_out,
+            len(test),
+            selected,
+            statistics.fmean(fold_errors),
+            statistics.fmean(fold_market_errors),
+        ))
     return {
         "n": len(errors),
         "mae": statistics.fmean(errors) if errors else None,
         "mean_selected_weight": (
             statistics.fmean(f.selected_weight for f in folds) if folds else None
         ),
-        "folds": [asdict(f) for f in folds],
+        "folds_better_than_market": sum(f.delta_vs_market < 0 for f in folds),
+        "folds": [{**asdict(f), "delta_vs_market": f.delta_vs_market} for f in folds],
     }
 
 
