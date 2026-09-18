@@ -126,10 +126,27 @@ def _consensus(lines: list[dict], field: str) -> float | None:
     return float(consensus if consensus is not None else statistics.fmean(values))
 
 
+def consensus_lines(season: int, week: int) -> list[dict]:
+    """CFBD's consensus market for a week, or an empty list if it cannot load.
+
+    The consensus is a benchmark, not the board's market: the live sportsbook
+    quote comes from the Odds API on its own key and its own credits. Losing
+    the benchmark should leave those cells reading "--", which the board
+    already renders, rather than taking the whole page down -- which is what a
+    single 429 did once CFBD's call allowance was spent. Deliberately not
+    served from a stale snapshot: an old price is worse than no price.
+    """
+    try:
+        return cfbd.lines(season, week=week)
+    except cfbd.CFBDError as exc:
+        print(f"  consensus market unavailable ({exc}); board shows the live book only")
+        return []
+
+
 def _market(season: int, week: int) -> dict[tuple[str, str], float]:
     """Expected HOME margin per matchup."""
     out: dict[tuple[str, str], float] = {}
-    for row in cfbd.lines(season, week=week):
+    for row in consensus_lines(season, week):
         spread = _consensus(row.get("lines") or [], "spread")
         if spread is None:
             continue
@@ -158,7 +175,7 @@ def _markets(rows: list[dict]) -> tuple[
 
 def _market_totals(season: int, week: int) -> dict[tuple[str, str], float]:
     out: dict[tuple[str, str], float] = {}
-    for row in cfbd.lines(season, week=week):
+    for row in consensus_lines(season, week):
         total = _consensus(row.get("lines") or [], "overUnder")
         if total is not None:
             out[(row["homeTeam"], row["awayTeam"])] = total

@@ -262,3 +262,20 @@ def test_rate_limit_with_calls_left_is_treated_as_a_blip(cache_dir, monkeypatch)
         cfbd.get(path, cacheable=False)
     assert cfbd.quota_spent() is False
     assert calls["n"] == cfbd.RETRIES
+
+
+def test_consensus_market_absence_is_not_fatal(monkeypatch, capsys):
+    """The board's market is the live book; CFBD's consensus is a benchmark.
+
+    A spent allowance must not take the page down over a benchmark, and must
+    not reach for a stale price either.
+    """
+    from cfbmodel import cli
+
+    def boom(season, **kw):
+        raise cfbd.CFBDError("allowance spent")
+
+    monkeypatch.setattr(cli.cfbd, "lines", boom)
+    assert cli.consensus_lines(2026, 3) == []
+    assert cli._market(2026, 3) == {}
+    assert "consensus market unavailable" in capsys.readouterr().out
