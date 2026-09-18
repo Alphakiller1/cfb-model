@@ -855,7 +855,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     comps = rating_bundle.components
     forms = cli._forms(season, week)
     preseason_totals = cli._preseason_totals(season)
-    market_rows = cli.cfbd.lines(season, week=week)
+    market_rows = cli.consensus_lines(season, week)
     market, market_total = cli._markets(market_rows)
     # Fetch only weeks whose games can affect this build. The unbounded current-
     # season endpoint has produced upstream 502s; week-scoped calls are smaller,
