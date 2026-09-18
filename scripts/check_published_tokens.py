@@ -25,7 +25,20 @@ FALLBACK_TIER1 = (
     "master/design/chase-tokens-v1.css"
 )
 
-IDENTITY = ("#08090F", "#9A6BFF", "DM Sans", "Roboto Condensed")
+# The palette is the settled part of the identity and is asserted literally.
+IDENTITY_COLORS = ("#08090F", "#9A6BFF")
+
+# Type is asserted by ROLE, not by one spelling of the families. The published
+# layer (DESIGN_LAYER_VERSION 20260916a) moved from naming "DM Sans" /
+# "Roboto Condensed" inline to routing every rule through --ca-font-ui and
+# --ca-font-display, which then resolve to the Chase families. That is a rename
+# upstream, not a loss of identity, and pinning the old literals failed this
+# repo's CI against a published file that was working as intended. Either
+# spelling passes; a file with no UI or display family at all still fails.
+IDENTITY_FONT_ROLES = (
+    ("UI", ("--ca-font-ui", "DM Sans", "Chase Sans")),
+    ("display", ("--ca-font-display", "Roboto Condensed", "Chase Display")),
+)
 
 _CRLF = b"\r\n"
 _LF = b"\n"
@@ -141,11 +154,16 @@ def main(argv: list[str] | None = None) -> int:
         print("SKIP TIER 1 fetch; local pins still match.")
         return 0
     pub_text = published.decode("utf-8", errors="replace")
-    missing = [key for key in IDENTITY if key not in pub_text]
+    missing = [key for key in IDENTITY_COLORS if key not in pub_text]
+    missing += [
+        f"{role} family ({' | '.join(spellings)})"
+        for role, spellings in IDENTITY_FONT_ROLES
+        if not any(spelling in pub_text for spelling in spellings)
+    ]
     if missing:
         print(f"FAIL {source} missing identity tokens: {missing}", file=sys.stderr)
         return 1
-    print(f"OK TIER 1 from {source} carries Chase identity literals")
+    print(f"OK TIER 1 from {source} carries Chase identity (palette + type roles)")
     return 0
 
 

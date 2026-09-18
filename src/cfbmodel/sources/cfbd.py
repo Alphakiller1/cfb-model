@@ -60,6 +60,17 @@ class FetchStatus:
 _MEMORY: dict[str, list | dict] = {}
 _STATUS: dict[str, FetchStatus] = {}
 _FAILURES: dict[str, str] = {}
+# Set when CFBD reports the key's call allowance is spent. Not a blip: nothing
+# this key sends will succeed until the allowance resets, so the build stops
+# retrying and leans on last-good snapshots instead of failing outright.
+_QUOTA_SPENT: bool = False
+
+CALL_LIMIT_HEADER = "X-CallLimit-Remaining"
+# How stale a schedule or box-score snapshot may be while the allowance is
+# spent. A monthly limit can strand a build for weeks, and a board built from a
+# fortnight-old schedule (clearly labelled) beats no board at all. Markets are
+# deliberately excluded -- a stale price is worse than no price.
+QUOTA_STALE_LIMIT = int(os.getenv("CFBD_QUOTA_STALE_SECONDS", str(30 * 24 * 60 * 60)))
 
 
 class CFBDError(RuntimeError):
@@ -128,9 +139,29 @@ def _record(path: str, state: str, data: list | dict, *, fetched_at: str | None,
 
 def clear_run_state() -> None:
     """Clear process-local memoisation and provenance before a new build."""
+    global _QUOTA_SPENT
     _MEMORY.clear()
     _STATUS.clear()
     _FAILURES.clear()
+    _QUOTA_SPENT = False
+
+
+def quota_spent() -> bool:
+    """True once CFBD has reported this key's call allowance exhausted."""
+    return _QUOTA_SPENT
+
+
+def _note_quota(error: Exception) -> None:
+    """Record an exhausted allowance from a 429's remaining-calls header."""
+    global _QUOTA_SPENT
+    if not isinstance(error, urllib.error.HTTPError) or error.code != 429:
+        return
+    remaining = (error.headers or {}).get(CALL_LIMIT_HEADER)
+    try:
+        if remaining is not None and int(remaining) <= 0:
+            _QUOTA_SPENT = True
+    except (TypeError, ValueError):
+        return
 
 
 def status_report() -> list[dict]:
@@ -155,7 +186,7 @@ def _stale_limit(path: str) -> int:
     if path.startswith("/lines"):
         return 6 * 60 * 60
     if path.startswith("/games") or path.startswith("/stats/game"):
-        return 72 * 60 * 60
+        return QUOTA_STALE_LIMIT if _QUOTA_SPENT else 72 * 60 * 60
     return 30 * 24 * 60 * 60
 
 
@@ -198,6 +229,38 @@ def _retry_delay(error: Exception | None, attempt: int) -> float:
             requested = 10.0 * (attempt + 1)
         return max(1.0, min(requested, MAX_RETRY_AFTER_SECONDS))
     return 1.5 * (attempt + 1)
+
+
+def _snapshot_or_fail(path: str, last: Exception | None,
+                      stale_if_error: int | None, attempts: int) -> list | dict:
+    """Serve the last-good snapshot for a failed fetch, or raise.
+
+    Shared by the retry-exhausted path and the spent-allowance shortcut so both
+    record the same provenance: a board built from a snapshot is reported as
+    one, never presented as fresh.
+    """
+    fallback = _read_runtime(
+        path, max_age=_stale_limit(path) if stale_if_error is None else stale_if_error
+    )
+    if fallback is not None:
+        data, fetched_at = fallback
+        moment = _parse_stamp(fetched_at)
+        age = ((_utc_now() - moment).total_seconds() if moment else float("inf"))
+        is_stale = age > _fresh_limit(path)
+        _MEMORY[path] = data
+        _record(path, "stale_snapshot" if is_stale else "cached_snapshot", data,
+                fetched_at=fetched_at, stale=is_stale,
+                error=f"{type(last).__name__}: {last}")
+        return data
+    message = f"CFBD request failed after {attempts} attempts: {path} ({last})"
+    if _QUOTA_SPENT:
+        message += " -- the key's call allowance is spent and no snapshot exists"
+    _FAILURES[path] = message
+    _STATUS[path] = FetchStatus(
+        path=path, state="error", fetched_at=None, age_seconds=None,
+        rows=None, stale=False, error=f"{type(last).__name__}: {last}",
+    )
+    raise CFBDError(message)
 
 
 def get(path: str, *, cacheable: bool = True,
@@ -262,31 +325,17 @@ def get(path: str, *, cacheable: bool = True,
             if exc.code < 500 and exc.code not in (408, 429):
                 raise CFBDError(f"CFBD request rejected ({exc.code}): {path}") from exc
             last = exc
+            _note_quota(exc)
+            if _QUOTA_SPENT:
+                # The allowance is spent; sleeping cannot win it back, and the
+                # rest of the build needs whatever was last observed.
+                return _snapshot_or_fail(path, last, stale_if_error, attempt + 1)
         except Exception as exc:  # noqa: BLE001 - network flakiness is retried
             last = exc
         if attempt + 1 < request_attempts:
             time.sleep(_retry_delay(last, attempt))
     else:
-        fallback = _read_runtime(
-            path, max_age=_stale_limit(path) if stale_if_error is None else stale_if_error
-        )
-        if fallback is not None:
-            data, fetched_at = fallback
-            moment = _parse_stamp(fetched_at)
-            age = ((_utc_now() - moment).total_seconds() if moment else float("inf"))
-            is_stale = age > _fresh_limit(path)
-            _MEMORY[path] = data
-            _record(path, "stale_snapshot" if is_stale else "cached_snapshot", data,
-                    fetched_at=fetched_at, stale=is_stale,
-                    error=f"{type(last).__name__}: {last}")
-            return data
-        message = f"CFBD request failed after {request_attempts} attempts: {path} ({last})"
-        _FAILURES[path] = message
-        _STATUS[path] = FetchStatus(
-            path=path, state="error", fetched_at=None, age_seconds=None,
-            rows=None, stale=False, error=f"{type(last).__name__}: {last}",
-        )
-        raise CFBDError(message)
+        return _snapshot_or_fail(path, last, stale_if_error, request_attempts)
 
     # Never cache an empty response. A feed that has not published yet returns
     # [], and caching that forever silently pins the model to "no data" long
