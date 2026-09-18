@@ -974,6 +974,10 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "cfbd_state": ("source error" if failed else
                        "bounded snapshot" if stale else "fresh"),
         "cfbd_endpoint_count": len(current_status),
+        # A spent provider allowance is a disclosed outage, not a mystery
+        # failure: the release gate may publish a degraded board through it
+        # while still refusing one whose slate or market is unsound.
+        "cfbd_quota_spent": cfbd.quota_spent(),
         "max_live_age_seconds": max(live_ages) if live_ages else None,
         "cfbd": endpoint_status,
         "odds": odds_status,
