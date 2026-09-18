@@ -193,3 +193,72 @@ def test_rate_limit_honors_retry_after(cache_dir, monkeypatch):
     monkeypatch.setattr(cfbd.time, "sleep", sleeps.append)
     assert cfbd.get("/games?year=2025", attempts=2) == payload
     assert sleeps == [12.0]
+
+
+def _rate_limited(monkeypatch, remaining="0"):
+    """Every call fails the way a spent CFBD allowance fails: 429 + header."""
+    calls = {"n": 0}
+
+    def fake_urlopen(*a, **kw):
+        calls["n"] += 1
+        raise urllib.error.HTTPError(
+            "https://api.collegefootballdata.com", 429, "Too Many Requests",
+            {cfbd.CALL_LIMIT_HEADER: remaining}, None,
+        )
+
+    monkeypatch.setattr(cfbd.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(cfbd.time, "sleep", lambda *_: None)
+    return calls
+
+
+def _seed_snapshot(path, payload, *, age_seconds):
+    """Write a last-good snapshot as though it were captured `age` ago."""
+    from datetime import timedelta
+
+    stamp = cfbd._stamp(cfbd._utc_now() - timedelta(seconds=age_seconds))
+    cfbd._atomic_write(cfbd._runtime_path(path), {"data": payload, "fetched_at": stamp})
+
+
+def test_spent_allowance_serves_a_schedule_snapshot_past_the_usual_window(
+    cache_dir, monkeypatch
+):
+    """A monthly limit strands the board for weeks; 72h of cover is not enough.
+
+    The 2026 key ran out mid-September and every scheduled build failed for
+    days, so the published board sat on a week that had already been played.
+    """
+    path = "/games?year=2026&seasonType=regular&week=3"
+    _seed_snapshot(path, [{"id": 1, "week": 3}], age_seconds=6 * 24 * 60 * 60)
+    calls = _rate_limited(monkeypatch)
+
+    rows = cfbd.get(path, cacheable=False)
+
+    assert rows == [{"id": 1, "week": 3}]
+    assert cfbd.quota_spent() is True
+    status = {s["path"]: s for s in cfbd.status_report()}[path]
+    assert status["state"] == "stale_snapshot", "a stale board must say so"
+    assert status["stale"] is True
+    # One attempt: retrying a spent allowance only delays the build.
+    assert calls["n"] == 1
+
+
+def test_a_spent_allowance_still_refuses_a_stale_market(cache_dir, monkeypatch):
+    """A week-old price is worse than no price, quota or not."""
+    path = "/lines?year=2026&week=3"
+    _seed_snapshot(path, [{"id": 1}], age_seconds=6 * 24 * 60 * 60)
+    _rate_limited(monkeypatch)
+
+    with pytest.raises(cfbd.CFBDError):
+        cfbd.get(path, cacheable=False)
+
+
+def test_rate_limit_with_calls_left_is_treated_as_a_blip(cache_dir, monkeypatch):
+    """A burst limit still retries, and does not widen the stale window."""
+    path = "/games?year=2026&seasonType=regular&week=3"
+    _seed_snapshot(path, [{"id": 1}], age_seconds=6 * 24 * 60 * 60)
+    calls = _rate_limited(monkeypatch, remaining="120")
+
+    with pytest.raises(cfbd.CFBDError):
+        cfbd.get(path, cacheable=False)
+    assert cfbd.quota_spent() is False
+    assert calls["n"] == cfbd.RETRIES
