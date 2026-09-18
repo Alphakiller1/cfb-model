@@ -279,3 +279,21 @@ def test_consensus_market_absence_is_not_fatal(monkeypatch, capsys):
     assert cli.consensus_lines(2026, 3) == []
     assert cli._market(2026, 3) == {}
     assert "consensus market unavailable" in capsys.readouterr().out
+
+
+def test_week_scope_falls_back_to_the_season_schedule(cache_dir, monkeypatch):
+    """A week never fetched before the outage has no snapshot of its own.
+
+    The season schedule covers every week, and during the 2026 allowance
+    outage it was the only place week 3 existed.
+    """
+    season_path = "/games?year=2026&seasonType=regular&classification=fbs"
+    _seed_snapshot(season_path, [
+        {"id": 1, "week": 2, "homeClassification": "fbs", "awayClassification": "fbs"},
+        {"id": 2, "week": 3, "homeClassification": "fbs", "awayClassification": "fbs"},
+    ], age_seconds=6 * 24 * 60 * 60)
+    _rate_limited(monkeypatch)
+
+    rows = cfbd.games(2026, week=3)
+
+    assert [g["id"] for g in rows] == [2]

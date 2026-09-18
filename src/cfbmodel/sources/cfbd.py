@@ -399,7 +399,25 @@ def games(season: int, *, season_type: str = "regular", week: int | None = None,
     if week is not None:
         path += f"&week={week}"
     # A season still in progress must not be cached, or the tail freezes.
-    rows = [_normalise_game(g) for g in get(path, cacheable=_season_is_closed(season))]
+    cacheable = _season_is_closed(season)
+    try:
+        raw = get(path, cacheable=cacheable)
+    except CFBDError:
+        # A week-scoped call has its own snapshot, and a week nobody asked for
+        # before the provider went down has none. The season schedule covers
+        # every week of the same season, so filter that instead of failing:
+        # during the 2026 allowance outage week 3 existed in the season
+        # snapshot (it is what dated the slate) while /games?...&week=3 had
+        # never been fetched.
+        if week is None:
+            raise
+        season_path = f"/games?year={season}&seasonType={season_type}"
+        if classification:
+            season_path += f"&classification={urllib.parse.quote(classification)}"
+        raw = [g for g in get(season_path, cacheable=cacheable)
+               if g.get("week") == week]
+        print(f"  week {week} schedule taken from the season snapshot ({len(raw)} games)")
+    rows = [_normalise_game(g) for g in raw]
     if classification == "fbs":
         rows = [g for g in rows if "fbs" in {
             g.get("homeClassification"), g.get("awayClassification")
