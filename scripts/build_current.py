@@ -37,6 +37,18 @@ def current_week(now: dt.datetime, season: int) -> int:
     return max(1, min(MAX_WEEK, ((now - start).days // 7) + 1))
 
 
+def _kickoff(game: dict) -> dt.datetime | None:
+    """UTC kickoff for a CFBD game row, or None when it cannot be read."""
+    raw = game.get("startDate") or game.get("start_date")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        moment = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=dt.timezone.utc)
+
+
 def first_unfinished_week(season: int) -> int | None:
     """The first regular-season week that still has an unplayed game.
 
@@ -58,6 +70,27 @@ def first_unfinished_week(season: int) -> int | None:
     except Exception as exc:  # noqa: BLE001 - any source failure degrades, not fails
         print(f"schedule lookup unavailable ({exc}); using the calendar rule")
         return None
+    # Kickoffs decide the week, with `completed` only as a tie-break. The
+    # schedule is fixed months ahead; completion flags are only as current as
+    # the last successful fetch. When the 2026 call allowance ran out, the
+    # freshest schedule available had been captured before week 2 kicked off,
+    # so "first unfinished week" answered 2 for days while week 3 was being
+    # played -- the board froze on a slate that had already happened.
+    now = dt.datetime.now(dt.timezone.utc)
+    last_kickoff: dict[int, dt.datetime] = {}
+    for game in games:
+        week, moment = game.get("week"), _kickoff(game)
+        if week is None or moment is None:
+            continue
+        week = int(week)
+        if week not in last_kickoff or moment > last_kickoff[week]:
+            last_kickoff[week] = moment
+    upcoming = [week for week, moment in last_kickoff.items() if moment >= now]
+    if upcoming:
+        return max(1, min(MAX_WEEK, min(upcoming)))
+    if last_kickoff:
+        return max(1, min(MAX_WEEK, max(last_kickoff)))
+
     unfinished = [int(g["week"]) for g in games
                   if g.get("week") is not None and not g.get("completed")]
     if not unfinished:

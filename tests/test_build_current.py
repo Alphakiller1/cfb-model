@@ -53,3 +53,58 @@ def test_season_over_keeps_the_last_week_rather_than_rolling_past_it(monkeypatch
     )
     monkeypatch.setattr(build_current.cfbd, "calendar", lambda season: [])
     assert build_current.first_unfinished_week(2026) is None
+
+
+def _slate(week: int, day: int, *, completed: bool) -> list[dict]:
+    """Two games for `week`, kicking off on September `day`."""
+    return [
+        {"week": week, "completed": completed,
+         "startDate": f"2026-09-{day:02d}T23:00:00.000Z"},
+        {"week": week, "completed": completed,
+         "startDate": f"2026-09-{day + 1:02d}T00:30:00.000Z"},
+    ]
+
+
+def test_stale_completion_flags_do_not_pin_the_board_to_a_played_week(monkeypatch):
+    """The 2026 outage: the newest schedule available predated week 2's kickoff.
+
+    When the key's call allowance ran out, every build fell back to a snapshot
+    captured before week 2 was played, so its `completed` flags all read False
+    and "first unfinished week" answered 2 for days while week 3 was the live
+    slate. The kickoffs in that same snapshot dated the weeks correctly.
+    """
+    schedule = (_slate(1, 5, completed=True)
+                + _slate(2, 11, completed=False)   # stale: actually played
+                + _slate(3, 19, completed=False))
+    monkeypatch.setattr(build_current.cfbd, "games", lambda season, **kw: schedule)
+    monkeypatch.setattr(
+        build_current.dt, "datetime",
+        type("Clock", (dt.datetime,),
+             {"now": staticmethod(lambda tz=None: _utc(2026, 9, 18))}),
+    )
+    assert build_current.first_unfinished_week(2026) == 3
+
+
+def test_kickoffs_keep_the_board_on_the_week_being_played(monkeypatch):
+    """Mid-week, before the slate kicks off, the board stays on that week."""
+    schedule = (_slate(1, 5, completed=True)
+                + _slate(2, 11, completed=True)
+                + _slate(3, 19, completed=False))
+    monkeypatch.setattr(build_current.cfbd, "games", lambda season, **kw: schedule)
+    monkeypatch.setattr(
+        build_current.dt, "datetime",
+        type("Clock", (dt.datetime,),
+             {"now": staticmethod(lambda tz=None: _utc(2026, 9, 16))}),
+    )
+    assert build_current.first_unfinished_week(2026) == 3
+
+
+def test_season_over_stays_on_the_final_week(monkeypatch):
+    schedule = _slate(1, 5, completed=True) + _slate(2, 11, completed=True)
+    monkeypatch.setattr(build_current.cfbd, "games", lambda season, **kw: schedule)
+    monkeypatch.setattr(
+        build_current.dt, "datetime",
+        type("Clock", (dt.datetime,),
+             {"now": staticmethod(lambda tz=None: _utc(2026, 12, 20))}),
+    )
+    assert build_current.first_unfinished_week(2026) == 2

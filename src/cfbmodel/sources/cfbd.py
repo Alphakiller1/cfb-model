@@ -473,11 +473,23 @@ def game_advanced_stats(season: int, *, week: int, exclude_garbage_time: bool = 
 
 def season_game_stats(season: int, *, through_week: int,
                       exclude_garbage_time: bool = True) -> list[dict]:
-    """Every per-game row for `season` strictly BEFORE `through_week`."""
+    """Every per-game row for `season` strictly BEFORE `through_week`.
+
+    A week that cannot be fetched is skipped rather than fatal. Efficiency is
+    an enhancement over the power ratings, not a precondition for a board: the
+    model already documents a ratings-only regime for the early weeks and uses
+    it whenever form is thin. Losing these rows to a provider outage should
+    degrade the forecast to that same path, not take the site down -- which is
+    what it did when the key's allowance ran out mid-season.
+    """
     out: list[dict] = []
     for week in range(1, max(1, through_week)):
-        out.extend(game_advanced_stats(season, week=week,
-                                       exclude_garbage_time=exclude_garbage_time))
+        try:
+            out.extend(game_advanced_stats(season, week=week,
+                                           exclude_garbage_time=exclude_garbage_time))
+        except CFBDError as exc:
+            print(f"  week {week} efficiency unavailable ({exc}); "
+                  "forecasting from power ratings only")
     return out
 
 
