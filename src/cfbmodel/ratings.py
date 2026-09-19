@@ -45,6 +45,12 @@ ITERATIONS = 15
 # the FBS side without inventing a rating per FCS program.
 FCS = "__FCS__"
 
+# An FCS programme that shows up often enough is rated as itself rather than
+# dumped into the shared bucket. The bucket still exists for one-off buy games;
+# the G5 teams that feast on the same four FCS opponents stop getting a free
+# schedule-strength pass.
+MIN_FCS_GAMES = 4
+
 # Margin SD used to turn a projected margin into a win probability. Measured at
 # 24.2 on 2025 FBS games, well above the NFL's ~13.5.
 MARGIN_SD = 24.2
@@ -73,8 +79,12 @@ class Game:
         return float(self.home_points - self.away_points)
 
 
-def _label(team: str, is_fbs: bool) -> str:
-    return team if is_fbs else FCS
+def _fcs_label(team: str) -> str:
+    return f"{FCS}:{team}"
+
+
+def _is_fbs_label(label: str) -> bool:
+    return not label.startswith(FCS)
 
 
 def build(
@@ -92,14 +102,28 @@ def build(
     """
     if not games:
         return {}
+    fcs_counts: dict[str, int] = {}
+    for g in games:
+        if not g.home_is_fbs:
+            fcs_counts[g.home] = fcs_counts.get(g.home, 0) + 1
+        if not g.away_is_fbs:
+            fcs_counts[g.away] = fcs_counts.get(g.away, 0) + 1
+
+    def label(team: str, is_fbs: bool) -> str:
+        if is_fbs:
+            return team
+        if fcs_counts.get(team, 0) >= MIN_FCS_GAMES:
+            return _fcs_label(team)
+        return FCS
+
     latest_week = max(g.week for g in games)
     observations: list[tuple[str, str, float, float]] = []
     for g in games:
         adjustment = 0.0 if g.neutral else home_field
         margin = cap_margin(g.margin - adjustment, cap)
         weight = 1.0 if halflife is None else 0.5 ** ((latest_week - g.week) / halflife)
-        home = _label(g.home, g.home_is_fbs)
-        away = _label(g.away, g.away_is_fbs)
+        home = label(g.home, g.home_is_fbs)
+        away = label(g.away, g.away_is_fbs)
         observations.append((home, away, margin, weight))
         observations.append((away, home, -margin, weight))
 
@@ -114,7 +138,7 @@ def build(
         updated = {
             t: (numerator[t] / denominator[t] if denominator[t] else 0.0) for t in teams
         }
-        fbs = [v for t, v in updated.items() if t != FCS]
+        fbs = [v for t, v in updated.items() if _is_fbs_label(t)]
         centre = statistics.fmean(fbs) if fbs else 0.0
         ratings = {t: v - centre for t, v in updated.items()}
     return {t: v * SHRINK for t, v in ratings.items()}

@@ -11,7 +11,7 @@ Oswald wordmark, hairline borders with layered shadows rather than heavy
 outlines. `board.css` holds only CFB-specific structure.
 
 The page leads with the authority gate rather than the numbers, for the same
-reason nfl-model does: at lam = 0 the published margin *is* the market, and a
+reason nfl-model does: the independent model has not cleared the ATS gate, and a
 dashboard that opened with a big confident number would be lying about that.
 """
 
@@ -343,15 +343,19 @@ def _projection_rows(row: Row, season: int) -> str:
             f'<span class="bd-a"></span><span class="bd-h"></span>'
             f'<span class="bd-c">{f.book_total:.1f}</span></div>')
     if f.projected_total is not None:
-        blend = (f" ({f.total_model_weight:.0%} independent signal)"
-                 if f.total_model_weight else " (market-only)")
+        if f.total_model_weight >= 1.0:
+            blend = " (model)"
+        elif f.total_model_weight > 0.0:
+            blend = f" ({f.total_model_weight:.0%} independent)"
+        else:
+            blend = " (market)"
         out.append(
-            f'<div class="bd-row bd-row--total"><span class="bd-k">Predictive total{esc(blend)}</span>'
+            f'<div class="bd-row bd-row--total"><span class="bd-k">Model total{esc(blend)}</span>'
             f'<span class="bd-a"></span><span class="bd-h"></span>'
             f'<span class="bd-c">{f.projected_total:.1f}</span></div>')
     if f.projected_home_score is not None:
         out.append(
-            f'<div class="bd-row bd-row--total"><span class="bd-k">Predictive score</span>'
+            f'<div class="bd-row bd-row--total"><span class="bd-k">Model score</span>'
             f'<span class="bd-a">{f.projected_away_score:.0f}</span>'
             f'<span class="bd-h">{f.projected_home_score:.0f}</span>'
             f'<span class="bd-c"></span></div>')
@@ -405,7 +409,7 @@ def _ratings_breakdown(row: Row, season: int, rating_table: dict[str, float],
     parts.append(_bd_row("Rating", away_r, home_r, home_r - away_r, kind="bd-row--total"))
 
     parts.append(_bd_section("Game context"))
-    home_field = 0.0 if f.neutral else ratings.HOME_FIELD_POINTS
+    home_field = 0.0 if f.neutral else f.home_field_points
     parts.append(_bd_row("Home field" if not f.neutral else "Neutral site",
                          None, None, home_field))
     parts.append(_bd_row("Calibration", None, None, fc.RATING_BIAS_CORRECTION))
@@ -449,7 +453,7 @@ def _breakdown(row: Row, season: int, rating_table: dict[str, float],
     away_r = rating_table.get(f.away)
     if home_r is not None and away_r is not None:
         gap = home_r - away_r
-        home_field = 0.0 if f.neutral else ratings.HOME_FIELD_POINTS
+        home_field = 0.0 if f.neutral else f.home_field_points
         # Rating and home field are INPUTS to the contribution below, not separate
         # addends -- the coefficient is applied to their sum. Giving them their own
         # Pts values made the column stop reconciling with the model margin.
@@ -513,7 +517,7 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
     gap_sub = ('<span class="gn-sub">not an edge</span>'
                if f.edge_points is None and f.market_gap is not None else "")
     note = "model only — no market price" if not f.has_price else (
-        f"predictive forecast anchored to {f.forecast_source.replace('_', ' ')}")
+        "independent model vs the live book")
     if f.edge_withheld_reason:
         note = esc(f.edge_withheld_reason)
     elif not f.used_efficiency:
@@ -662,13 +666,16 @@ def _methodology() -> str:
     return f"""<div class="mth">
 <div class="mth-card"><div class="mth-h">Power ratings</div>
 <p>Opponent-adjusted scoring margin, solved iteratively. Home field is removed
-before rating, so a soft home schedule earns nothing.</p>
+before rating, so a soft home schedule earns nothing. The 4.53-point average is
+then adjusted per game for elevation gain, travel, and eastward body-clock
+shift — centred so a typical game still gets 4.53. Frequent FCS opponents are
+rated as themselves instead of one pooled bucket.</p>
 <p>Margins are compressed through <code>cap · tanh(margin / cap)</code> at cap 32.
 36% of FBS games are decided by 28+ points — the NFL figure is nearer 8% — so an
 unadjusted mean lets garbage time drive the ratings. Capping is worth about half
 a point of MAE.</p>
 <table class="mth-tbl">
-<tr><td>Home field</td><td>{matrix.HOME_FIELD_POINTS:.2f} pts</td></tr>
+<tr><td>Home field (average)</td><td>{matrix.HOME_FIELD_POINTS:.2f} pts</td></tr>
 <tr><td>Blowout cap</td><td>{matrix.BLOWOUT_CAP:.0f}</td></tr>
 <tr><td>Recency half-life</td><td>{matrix.RECENCY_HALFLIFE_WEEKS:.0f} wks</td></tr>
 <tr><td>Margin SD</td><td>{matrix.MARGIN_SD:.1f} pts</td></tr></table></div>
@@ -698,10 +705,11 @@ drives and plays per game. CFB tempo varies far more than the NFL&rsquo;s.</p>
 <tr><td>Model total</td><td>13.0446</td></tr>
 <tr><td>Market total</td><td>12.5055</td></tr>
 <tr><td>Total residual SD</td><td>{totals.TOTAL_SD:.2f}</td></tr></table>
-<p>The headline score is algebra on the best predictive margin and total. The margin
-uses the freshest timestamp-verified DraftKings line because the independent model did
-not improve it in season-held-out testing. Totals retain only the small independent share
-that survived the same test. The full independent estimates remain visible as diagnostics.</p></div>
+<p>The headline score is algebra on the independent margin and total, then the
+mean of 10,000 residual draws. The sportsbook line is shown next to it as the
+benchmark. On 3,256 games the independent MAE is still worse than the close
+(12.53 vs 12.16); this board publishes the disagreement anyway, because a
+market-anchored number cannot beat the market. Authority stays RESEARCH_ONLY.</p></div>
 
 <div class="mth-card"><div class="mth-h">Current-season form</div>
 <p>Ratings and scoring priors start from last year, then fold in this year&rsquo;s
@@ -720,12 +728,14 @@ model&rsquo;s MAE, so more draws do not change a displayed score. The stream is
 seeded from the matchup, so a rebuild with the same inputs reprints the same
 board. Mean scores are the projection; a single draw is not.</p></div>
 
-<div class="mth-card"><div class="mth-h">Predictive ensemble</div>
-<p>A nested leave-one-season-out audit covered 3,702 games from 2021–2025. In Week 2,
-market margin MAE was 11.49 versus 12.62 for the independent model; a trained blend was
-worse at 11.61, so the headline margin is market-only. Week 2 totals improved from 12.60
-to 12.55 with a small model share; the production weight is conservatively capped at
-12.5%. These weights affect the predictive score, never the research-only authority.</p></div>
+<div class="mth-card"><div class="mth-h">Independent challenger</div>
+<p>A nested leave-one-season-out audit covered 3,702 games from 2021–2025. The
+market remains the better MAE forecast. Publishing it as the headline made every
+projection sit on the sportsbook line, which cannot produce an edge. The board
+now publishes the independent margin and total as the forecast, with DraftKings
+kept as the live benchmark. ATS on disagreements is still 51.11% with a CI that
+straddles 52.38% breakeven, so this is a challenger, not a cleared betting
+model.</p></div>
 
 <div class="mth-card"><div class="mth-h">Point-in-time</div>
 <p>Every feature is queried strictly before the week being forecast. CFBD&rsquo;s
@@ -786,7 +796,7 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CFB Model — Chase Analytics</title>
-<meta name="description" content="College football research dashboard: opponent-adjusted power ratings, market-anchored game forecasts, and an explicit authority gate.">
+<meta name="description" content="College football research dashboard: opponent-adjusted power ratings, independent game forecasts versus DraftKings, and an explicit authority gate.">
 {_FONTS}
 <style>{_css()}</style>
 </head>
@@ -798,9 +808,9 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
 <section class="hero" style="margin-top:0">
 <span class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>CHASE ANALYTICS MODEL LAB</span>
 <h1 class="hero-title">College Football Model</h1>
-<p class="hero-sub">A point-in-time CFB forecasting system with verified DraftKings
-quotes, opponent-adjusted team strength, early-season reliability weighting, and a
-timestamped shadow record.</p>
+<p class="hero-sub">A point-in-time CFB forecasting system that publishes its own
+spread and total against verified DraftKings quotes, with opponent-adjusted team
+strength, early-season reliability weighting, and a timestamped shadow record.</p>
 <div class="hero-meta">{regime_pill}
 <span class="pill">{len(rows)} games</span>
 <span class="pill">{len([r for r in rating_table if r != ratings.FCS])} FBS teams rated</span>
@@ -812,10 +822,10 @@ timestamped shadow record.</p>
 <section id="board">
 <div class="sec-eyebrow">01 · Slate</div>
 <h2 class="sec-title">Week {esc(week)} Board</h2>
-<p class="sec-blurb">Forecast margin is the home side and anchors to the freshest verified
-DraftKings quote. Independent is the model&rsquo;s price-free estimate, retained for diagnosis;
-it is not substituted for the stronger market estimate. The displayed score reconciles to
-the forecast margin and predictive total. Expand any game for the full breakdown.</p>
+<p class="sec-blurb">Forecast margin is the home side and comes from the independent
+model. DraftKings is the live benchmark it is trying to beat, not the published
+number. Expand any game for the full breakdown. Authority remains RESEARCH_ONLY:
+historical ATS on disagreements has not cleared 52.38% breakeven.</p>
 {early_notice}
 <div class="games">{cards}</div>
 </section>
@@ -867,12 +877,16 @@ def build(*, season: int, week: int, out: Path) -> Path:
     cfbd.clear_run_state()
     teams.load.cache_clear()
     authority = auth_mod.current()
-    rating_bundle = cli.build_rating_bundle(season, week)
+    rating_bundle = cli.build_rating_bundle(
+        season, week, include_scored_this_week=True,
+    )
     rating_table = rating_bundle.table
     comps = rating_bundle.components
-    forms = cli._forms(season, week)
+    forms = cli._forms(season, week, include_scored_this_week=True)
     preseason_totals = cli._preseason_totals(season)
-    current_games = cli._current_season_games(season, week)
+    current_games = cli._current_season_games(
+        season, week, include_scored_this_week=True,
+    )
     market_rows = cli.consensus_lines(season, week)
     market, market_total = cli._markets(market_rows)
     # Fetch only weeks whose games can affect this build. The unbounded current-
@@ -881,6 +895,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     season_games: list[dict] = []
     for game_week in range(1, week + 1):
         season_games.extend(cli.cfbd.games(season, week=game_week))
+    venues = cli._venue_context(season, season_games)
 
     # A missing quote is an explicit source state, not an empty dictionary that
     # looks indistinguishable from a successful refresh with no coverage.
@@ -907,15 +922,18 @@ def build(*, season: int, week: int, out: Path) -> Path:
                 home, away, week, preseason_totals, current_games),
             book=book_lines.get((home, away)),
             authority=authority, week=week, season=season,
+            home_field=cli._home_field(
+                venues, home, away,
+                neutral=bool(g.get("neutralSite")),
+                venue_id=cli._venue_id(g),
+            ),
         )
         moment = _parse_kickoff(g.get("startDate"))
         rows.append(Row(forecast, _kickoff_label(moment), forms.get(home),
                         forms.get(away), kickoff_utc=moment))
 
     # Chronological. Sorting by |edge| ranked the board by the size of the
-    # model's disagreement with the price, which at lam = 0 buys nothing: the
-    # biggest "edges" are the widest spreads, where a compressed model always
-    # lands on the underdog (see forecast.py). Kickoff order is what a slate
+    # model's disagreement with the price. Kickoff order is what a slate
     # actually is, and it stops the ordering from implying a conviction the
     # authority gate says the model has not earned.
     rows.sort(key=lambda r: (r.sort_key, r.forecast.away, r.forecast.home))

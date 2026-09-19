@@ -53,7 +53,8 @@ class RatingBundle:
     live: dict[str, float]
 
 
-def build_rating_bundle(season: int, week: int) -> RatingBundle:
+def build_rating_bundle(season: int, week: int, *,
+                        include_scored_this_week: bool = False) -> RatingBundle:
     """Ratings known before `week` of `season`.
 
     A fitted preseason prior (prior seasons + talent + returning production +
@@ -67,15 +68,21 @@ def build_rating_bundle(season: int, week: int) -> RatingBundle:
     extra = preseason.roster_features(season)
     components = preseason.components(season, p1, p2, extra)
     prior = {team: component.rating for team, component in components.items()}
-    live = ratings.build(_current_season_games(season, week))
+    live = ratings.build(_current_season_games(
+        season, week, include_scored_this_week=include_scored_this_week,
+    ))
     return RatingBundle(preseason.blend(prior, live, week), components, live)
 
 
-def build_ratings(season: int, week: int) -> dict[str, float]:
-    return build_rating_bundle(season, week).table
+def build_ratings(season: int, week: int, *,
+                  include_scored_this_week: bool = False) -> dict[str, float]:
+    return build_rating_bundle(
+        season, week, include_scored_this_week=include_scored_this_week,
+    ).table
 
 
-def _current_season_games(season: int, week: int) -> list[ratings.Game]:
+def _current_season_games(season: int, week: int, *,
+                           include_scored_this_week: bool = False) -> list[ratings.Game]:
     """Scored games from `season` strictly before `week`.
 
     Current-season full-year `/games` queries are large enough to return 502
@@ -85,9 +92,14 @@ def _current_season_games(season: int, week: int) -> list[ratings.Game]:
     Uses recorded scores rather than CFBD's `completed` flag. The flag can lag
     a final by hours, and requiring it is how a current-season rating table
     silently stays empty while the scores are already on the box score.
+
+    Production boards pass `include_scored_this_week=True` so Friday finals
+    inform Saturday games. Walk-forward calibration leaves it off, or week W
+    would see its own answers.
     """
+    last = week if include_scored_this_week else week - 1
     rows: list[dict] = []
-    for completed_week in range(1, week):
+    for completed_week in range(1, max(1, last + 1)):
         rows.extend(cfbd.games(season, week=completed_week))
     return _to_games(rows)
 
@@ -99,6 +111,29 @@ def _preseason_totals(season: int) -> totals.PreseasonContext | None:
     return totals.preseason_context(games)
 
 
+def _venue_context(season: int, rows: list[dict] | None = None) -> object:
+    from cfbmodel import venue
+    try:
+        return venue.load_context(season, rows)
+    except Exception:
+        return None
+
+
+def _venue_id(game: dict) -> int | None:
+    raw = game.get("venueId")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _home_field(venues, home: str, away: str, *, neutral: bool,
+                venue_id: int | None = None) -> float:
+    if venues is not None:
+        return venues.home_field(home, away, neutral=neutral, venue_id=venue_id)
+    return 0.0 if neutral else ratings.HOME_FIELD_POINTS
+
+
 def _total_prior(home: str, away: str, week: int,
                  prior: totals.PreseasonContext | None,
                  current_games: list[ratings.Game]) -> float | None:
@@ -108,13 +143,19 @@ def _total_prior(home: str, away: str, week: int,
     )
 
 
-def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
+def _forms(season: int, week: int, *,
+           include_scored_this_week: bool = False) -> dict[str, matrix.TeamForm]:
     """Opponent-adjusted efficiency for every team, using games before `week`.
 
     Raw season stats are confounded by schedule strength; adjusting is worth 0.30
     points of MAE overall and 0.70 in weeks 5-7. See efficiency.py.
     """
     rows = cfbd.season_game_stats(season, through_week=week)
+    if include_scored_this_week:
+        try:
+            rows.extend(cfbd.game_advanced_stats(season, week=week))
+        except cfbd.CFBDError:
+            pass
     if not rows:
         return {}
     adjusted = efficiency.adjust_all(rows)
@@ -207,12 +248,15 @@ def cmd_board(args: argparse.Namespace) -> int:
           f"({len(auth.unmet_gates)} gates unmet)")
     print(f"  {auth.evidence}\n")
 
-    r = build_ratings(args.season, args.week)
-    forms = _forms(args.season, args.week)
+    r = build_ratings(args.season, args.week, include_scored_this_week=True)
+    forms = _forms(args.season, args.week, include_scored_this_week=True)
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
     preseason_totals = _preseason_totals(args.season)
-    current_games = _current_season_games(args.season, args.week)
+    current_games = _current_season_games(
+        args.season, args.week, include_scored_this_week=True,
+    )
+    venues = _venue_context(args.season)
     slate = [g for g in cfbd.games(args.season, week=args.week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
     if not slate:
@@ -233,6 +277,11 @@ def cmd_board(args: argparse.Namespace) -> int:
             authority=auth,
             week=args.week,
             season=args.season,
+            home_field=_home_field(
+                venues, home, away,
+                neutral=bool(g.get("neutralSite")),
+                venue_id=_venue_id(g),
+            ),
         )
         rows.append((f, site._parse_kickoff(g.get("startDate"))))
 
@@ -281,10 +330,10 @@ def cmd_board(args: argparse.Namespace) -> int:
             tot = "--"
         flag = "" if f.used_efficiency else "  [ratings-only]"
         print(f"  {when[:22]:<22} {matchup[:40]:<40} {score:>13} {tot:>12} {model:>7} {mkt:>7} {edge:>9}  {f.action.value}{flag}")
-    print(f"\n  {len(rows)} games · score uses the market-anchored predictive forecast "
-          f"(away-home); model is the independent diagnostic")
-    print(f"  (parenthesised) = information gap, not an edge · * = emergency league-mean fallback · "
-          f"forecast margin equals the best available market at lam=0\n")
+    print(f"\n  {len(rows)} games · score is the independent model (away-home); "
+          f"sportsbook line is the benchmark it is trying to beat")
+    print(f"  (parenthesised) = information gap, not a cleared edge · "
+          f"authority remains RESEARCH_ONLY at ATS 51.11%\n")
     return 0
 
 
@@ -293,12 +342,15 @@ def cmd_export(args: argparse.Namespace) -> int:
     from pathlib import Path
 
     auth = current()
-    r = build_ratings(args.season, args.week)
-    forms = _forms(args.season, args.week)
+    r = build_ratings(args.season, args.week, include_scored_this_week=True)
+    forms = _forms(args.season, args.week, include_scored_this_week=True)
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
     preseason_totals = _preseason_totals(args.season)
-    current_games = _current_season_games(args.season, args.week)
+    current_games = _current_season_games(
+        args.season, args.week, include_scored_this_week=True,
+    )
+    venues = _venue_context(args.season)
     try:
         from cfbmodel.sources import oddsapi
         from cfbmodel import teams as teams_mod
@@ -324,6 +376,11 @@ def cmd_export(args: argparse.Namespace) -> int:
                 home, away, args.week, preseason_totals, current_games),
             book=book_lines.get((home, away)),
             authority=auth, week=args.week, season=args.season,
+            home_field=_home_field(
+                venues, home, away,
+                neutral=bool(g.get("neutralSite")),
+                venue_id=_venue_id(g),
+            ),
         )
         rows.append((f, site._parse_kickoff(g.get("startDate"))))
 

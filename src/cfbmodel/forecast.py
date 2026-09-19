@@ -1,5 +1,4 @@
-"""Game forecast: opponent-adjusted efficiency over power ratings, anchored to
-the market.
+"""Game forecast: opponent-adjusted efficiency over power ratings.
 
 Two prediction regimes, because they were validated separately and mixing them
 would be a fit applied outside where it was measured:
@@ -12,20 +11,19 @@ would be a fit applied outside where it was measured:
   alone would shrink every margin toward zero. Falls back to the separately
   validated ratings path with its own bias correction. MAE 12.9749.
 
-The anchor weight `lam` is the fraction of the model's disagreement with the
-closing line that is kept. It defaults to 0.0, and that default is a measurement:
-across 3,256 out-of-sample games the model's MAE is 12.5251 against the market's
-12.1596, and ATS on disagreements is 51.11% (95% CI [49.39%, 52.84%]) against a
-52.38% breakeven. The model no longer loses *confidently* -- the interval now
-straddles breakeven -- but the point estimate is still short, so the honest
-anchored answer remains the price.
+The published number is the independent model (`lam = 1`). A market-anchored
+board cannot beat the close: it *is* the close. The sportsbook line stays on
+the card as the thing the model is trying to beat.
+
+That is a product choice, not a cleared gate. Across 3,256 out-of-sample games
+the model's MAE is 12.5251 against the market's 12.1596, and ATS on
+disagreements is 51.11% (95% CI [49.39%, 52.84%]) against a 52.38% breakeven.
+Authority stays RESEARCH_ONLY. `lam = 0` remains available as the MAE-optimal
+anchor.
 
 * **Early transition** -- weeks 2-4 blend the full estimate at its measured
   reliability (30%, 50%, 80%). Weeks 2-3 then receive separately held-out scale
   calibration. This prevents a one-game sample from masquerading as mature form.
-
-Raising `lam` is a claim about evidence and belongs with a gate record, not a
-config tweak.
 """
 
 from __future__ import annotations
@@ -35,19 +33,15 @@ from dataclasses import dataclass
 from cfbmodel import calibration, matrix, ratings, simulate, totals
 from cfbmodel.authority import Action, Authority, current
 
-# Fraction of model-vs-market disagreement retained. See module docstring.
-DEFAULT_LAM = 0.0
+# Fraction of model-vs-market disagreement retained in the published number.
+# 1.0 publishes the independent model so the board can disagree with the book.
+# 0.0 is the MAE-optimal anchor measured in PREDICTIVE-OVERHAUL-2026-09-11.md.
+DEFAULT_LAM = 1.0
 
-# Nested leave-one-season-out over 3,702 games found no reliable margin gain
-# from retaining independent disagreement in the headline forecast.  For Week 2
-# specifically, the market scored 11.494 MAE and the trained blend worsened to
-# 11.611.  The predictive margin therefore stays on the freshest verified price.
-#
-# Totals contain a small, stable residual signal.  The only early-week weights
-# shipped here are regimes that beat the market out of sample; unstable or
-# losing regimes remain market-only.  See reports/PREDICTIVE-OVERHAUL-2026-09-11.md.
-TOTAL_MODEL_WEIGHT_BY_WEEK = {1: 0.0, 2: 0.125, 3: 0.25, 4: 0.0}
-MATURE_TOTAL_MODEL_WEIGHT = 0.175
+# Independent totals are the published totals. Market totals remain on the
+# card as the benchmark; `total_edge` is independent minus that benchmark.
+TOTAL_MODEL_WEIGHT_BY_WEEK = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0}
+MATURE_TOTAL_MODEL_WEIGHT = 1.0
 
 # Correction for the ratings-only fallback. `ratings.projected_margin` runs
 # +2.123 points high for the home side; this is measured directly, and the
@@ -115,6 +109,7 @@ class Forecast:
     simulations: int = 0
     simulated_margin: float | None = None
     simulated_win_probability: float | None = None
+    home_field_points: float = 0.0
 
     @property
     def has_price(self) -> bool:
@@ -215,12 +210,17 @@ def game(
     total_lam: float | None = None,
     season: int | None = None,
     simulations: int | None = None,
+    home_field: float | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
     in_regime = True if week is None else week >= FIRST_VALIDATED_WEEK
 
-    base = ratings.projected_margin(team_ratings, home, away, neutral=neutral)
+    if home_field is None:
+        home_field = 0.0 if neutral else ratings.HOME_FIELD_POINTS
+    base = ratings.projected_margin(
+        team_ratings, home, away, neutral=neutral, home_field=home_field,
+    )
     if base is None:
         raw_model_margin, used_efficiency = None, False
         preseason_margin, efficiency_margin, efficiency_reliability = None, None, 0.0
@@ -251,11 +251,20 @@ def game(
         published, anchored, market_gap = model_margin, False, None
         forecast_source = "independent_model"
     else:
-        anchored = True
         market_gap = None if model_margin is None else model_margin - reference_margin
-        published = (reference_margin if market_gap is None
-                     else reference_margin + lam * market_gap)
-        forecast_source = "draftkings" if book_margin is not None else "cfbd_consensus"
+        if market_gap is None:
+            published, anchored = reference_margin, True
+            forecast_source = "draftkings" if book_margin is not None else "cfbd_consensus"
+        else:
+            published = reference_margin + lam * market_gap
+            anchored = lam < 1.0
+            if lam >= 1.0:
+                forecast_source = "independent_model"
+            elif lam <= 0.0:
+                forecast_source = ("draftkings" if book_margin is not None
+                                   else "cfbd_consensus")
+            else:
+                forecast_source = "blended"
     edge, withheld = _edge(market_gap, used_efficiency=used_efficiency, in_regime=in_regime)
 
     win_p = None if published is None else ratings.win_probability(published)
@@ -271,12 +280,17 @@ def game(
         total_weight = 1.0 if predictive_total is not None else 0.0
     elif independent_projection.total is None:
         predictive_total = reference_total
-        total_basis = forecast_source
+        total_basis = ("draftkings" if book_total is not None else forecast_source)
         total_weight = 0.0
     else:
         predictive_total = (reference_total + total_weight
                             * (independent_projection.total - reference_total))
-        total_basis = f"{forecast_source}_anchored"
+        if total_weight >= 1.0:
+            total_basis = "independent_model"
+        elif total_weight <= 0.0:
+            total_basis = ("draftkings" if book_total is not None else forecast_source)
+        else:
+            total_basis = f"{forecast_source}_anchored"
     projection = totals.scoreline(
         published,
         predictive_total,
@@ -341,4 +355,5 @@ def game(
         simulations=sim_n,
         simulated_margin=sim_margin,
         simulated_win_probability=sim_win,
+        home_field_points=0.0 if neutral else home_field,
     )

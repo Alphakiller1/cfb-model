@@ -187,7 +187,7 @@ def update(
             "home": forecast.home,
             "away": forecast.away,
             "kickoff": _stamp(kickoff),
-            "model_lineage": "2026.09-current-year-sim-mean",
+            "model_lineage": "2026.09-independent-venue-fcs",
             "model_regime": forecast.model_regime,
             "model_margin": forecast.model_margin,
             "forecast_margin": forecast.margin,

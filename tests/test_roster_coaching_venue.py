@@ -149,6 +149,16 @@ class TestVenue:
         assert features["elevation_gain_kft"] == pytest.approx(6.36)
         assert 0.8 < features["travel_kmiles"] < 0.9
 
+    def test_altitude_and_travel_move_home_field_off_the_average(self):
+        from cfbmodel.ratings import HOME_FIELD_POINTS
+        typical = venue.home_field_points(self.MIAMI, self.MIAMI)
+        laramie = venue.home_field_points(self.LARAMIE, self.MIAMI)
+        assert typical == pytest.approx(HOME_FIELD_POINTS, abs=0.5)
+        assert laramie > typical + 2
+
+    def test_a_neutral_site_has_zero_home_field(self):
+        assert venue.home_field_points(self.LARAMIE, self.MIAMI, neutral=True) == 0.0
+
     def test_home_venue_is_taken_from_where_a_team_actually_hosts(self):
         games = [
             {"homeTeam": "X", "venueId": 7, "neutralSite": False},

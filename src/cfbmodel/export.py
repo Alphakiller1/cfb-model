@@ -71,6 +71,7 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         "market_gap": forecast.market_gap,
         "edge_withheld_reason": forecast.edge_withheld_reason,
         "win_probability": forecast.win_probability,
+        "home_field_points": forecast.home_field_points,
         "simulations": forecast.simulations,
         "simulated_margin": forecast.simulated_margin,
         "simulated_win_probability": forecast.simulated_win_probability,

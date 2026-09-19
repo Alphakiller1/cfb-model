@@ -8,9 +8,18 @@ RATINGS = {"A": 20.0, "B": 5.0}
 
 
 def test_lam_zero_publishes_the_market():
-    """The default is a measurement: the market beat the model, so publish it."""
-    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0)
+    """The MAE-optimal anchor still exists; it is no longer the default."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0, lam=0.0)
     assert f.margin == pytest.approx(12.0)
+
+
+def test_default_publishes_the_independent_model():
+    """Beating the close requires disagreeing with it."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=12.0)
+    assert f.margin == pytest.approx(f.model_margin)
+    assert f.margin != pytest.approx(12.0)
+    assert f.forecast_source == "independent_model"
+    assert f.market_anchored is False
 
 
 def test_lam_one_publishes_the_model():
@@ -164,10 +173,9 @@ def test_scoreline_reflects_the_predictive_margin():
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form(),
                 market_margin=1.0, simulations=0)
-    assert f.margin == pytest.approx(1.0)          # published = market
+    assert f.margin == pytest.approx(f.model_margin)
     spread = f.projected_home_score - f.projected_away_score
     assert spread == pytest.approx(f.margin)
-    assert spread == pytest.approx(1.0)
 
 
 def test_total_edge_is_model_minus_market():
@@ -177,14 +185,13 @@ def test_total_edge_is_model_minus_market():
     assert f.total_edge == pytest.approx(f.independent_total - 50.0)
 
 
-def test_week_two_total_keeps_only_validated_independent_weight():
+def test_published_total_is_the_independent_total():
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form(),
-                market_margin=4.0, market_total=50.0, week=2)
-    assert f.total_model_weight == pytest.approx(0.125)
-    assert f.projected_total == pytest.approx(
-        50.0 + 0.125 * (f.independent_total - 50.0)
-    )
+                market_margin=4.0, market_total=50.0, week=2, simulations=0)
+    assert f.total_model_weight == pytest.approx(1.0)
+    assert f.projected_total == pytest.approx(f.independent_total)
+    assert f.projected_total != pytest.approx(50.0)
 
 
 def test_total_without_market_is_fully_independent():
@@ -195,15 +202,16 @@ def test_total_without_market_is_fully_independent():
     assert f.forecast_source == "independent_model"
 
 
-def test_fresh_book_quote_is_the_current_forecast_anchor():
+def test_fresh_book_quote_is_the_benchmark_not_the_forecast():
     book = type("Book", (), {
         "book_title": "DraftKings", "home_margin": 6.5, "total": 48.5,
         "last_update": "2026-09-11T16:00:00Z", "commence_time": None,
     })()
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 market_margin=5.0, market_total=50.0, book=book, week=2)
-    assert f.margin == pytest.approx(6.5)
-    assert f.forecast_source == "draftkings"
+    assert f.margin == pytest.approx(f.model_margin)
+    assert f.forecast_source == "independent_model"
+    assert f.book_margin == pytest.approx(6.5)
     assert f.market_gap == pytest.approx(f.model_margin - 6.5)
 
 
@@ -238,6 +246,13 @@ def test_projected_score_is_the_mean_of_simulations():
     assert f.projected_home_score == pytest.approx(closed.projected_home_score, abs=0.6)
     assert f.win_probability == pytest.approx(f.simulated_win_probability)
     assert f.total_basis.endswith("_sim_mean")
+
+
+def test_custom_home_field_moves_the_independent_margin():
+    base = fc.game(home="A", away="B", team_ratings=RATINGS, simulations=0)
+    high = fc.game(home="A", away="B", team_ratings=RATINGS, home_field=8.0, simulations=0)
+    assert high.model_margin - base.model_margin == pytest.approx(8.0 - 4.53)
+    assert high.home_field_points == pytest.approx(8.0)
 
 
 def test_the_same_matchup_reprints_the_same_simulated_score():

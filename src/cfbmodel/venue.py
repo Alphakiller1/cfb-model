@@ -18,10 +18,11 @@ crediting the team for its altitude):
   early eastern kickoff is the well-documented direction of the effect, and
   treating it symmetrically would cancel exactly the asymmetry that matters.
 
-Nothing here is fitted. `home_field_features` produces the candidate terms and
-`cli fit-preseason` decides whether they earn coefficients; until then
-`ratings.HOME_FIELD_POINTS` remains the whole model of home field and this
-module is inert.
+Nothing here used to be fitted. The terms below are conservative, centred
+deviations from the 4.53-point average so a typical game still gets 4.53 and
+only unusual altitude, travel, or eastward body-clock shift moves the number.
+They are deliberately smaller than the raw literature effects; a missing venue
+still falls back to the constant.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ import math
 from dataclasses import dataclass
 
 from cfbmodel.sources import cfbd
+from cfbmodel.ratings import HOME_FIELD_POINTS
 
 EARTH_RADIUS_MILES = 3958.8
 
@@ -43,6 +45,21 @@ FEET_PER_METRE = 3.28084
 # and CFBD's `timezone` string is not always populated, so longitude is the
 # robust proxy: 15 degrees is one hour.
 DEGREES_PER_HOUR = 15.0
+
+# Applied to features after subtracting the typical-game mean, so the 4.53
+# constant still describes an average home game. Magnitudes are shrunk toward
+# zero relative to the raw altitude/travel literature.
+FEATURE_MEANS = {
+    "elevation_gain_kft": 0.15,
+    "travel_kmiles": 0.42,
+    "timezone_shift_hours": 0.0,
+}
+COEFFICIENTS = {
+    "elevation_gain_kft": 0.55,
+    "travel_kmiles": 0.70,
+    "timezone_shift_hours": 0.35,
+}
+MAX_ADJUSTMENT = 6.0
 
 
 @dataclass(frozen=True)
@@ -156,17 +173,34 @@ def home_field_features(
     return out
 
 
-def team_venues(season: int) -> dict[str, int]:
-    """Team -> its home venue id, taken from the season's scheduled home games.
+def extra_points(features: dict[str, float]) -> float:
+    """Points added to the 4.53 constant. Zero when there is nothing unusual."""
+    if not features:
+        return 0.0
+    total = 0.0
+    for name, coef in COEFFICIENTS.items():
+        if name not in features:
+            continue
+        total += coef * (features[name] - FEATURE_MEANS.get(name, 0.0))
+    return max(-MAX_ADJUSTMENT, min(MAX_ADJUSTMENT, total))
 
-    Derived from the schedule rather than a teams endpoint because that is what
-    actually determines where a team hosts, including the years a programme
-    plays somewhere else while its stadium is rebuilt.
-    """
-    try:
-        rows = cfbd.games(season)
-    except Exception:
-        return {}
+
+def home_field_points(
+    home_venue: Venue | None,
+    away_venue: Venue | None,
+    *,
+    neutral: bool = False,
+) -> float:
+    """Full home-field term for one game, including venue deviations."""
+    if neutral:
+        return 0.0
+    return HOME_FIELD_POINTS + extra_points(
+        home_field_features(home_venue, away_venue, neutral=False)
+    )
+
+
+def team_venues_from(rows: list[dict]) -> dict[str, int]:
+    """Team -> its home venue id, taken from scheduled home games."""
     counts: dict[str, dict[int, int]] = {}
     for game in rows:
         if game.get("neutralSite"):
@@ -180,3 +214,55 @@ def team_venues(season: int) -> dict[str, int]:
         team: max(venues.items(), key=lambda kv: kv[1])[0]
         for team, venues in counts.items() if venues
     }
+
+
+def team_venues(season: int) -> dict[str, int]:
+    """Team -> its home venue id, taken from the season's scheduled home games.
+
+    Derived from the schedule rather than a teams endpoint because that is what
+    actually determines where a team hosts, including the years a programme
+    plays somewhere else while its stadium is rebuilt.
+    """
+    try:
+        rows = cfbd.games(season)
+    except Exception:
+        return {}
+    return team_venues_from(rows)
+
+
+@dataclass(frozen=True)
+class Context:
+    """Venues and home stadiums for one season, loaded once per build."""
+
+    venues: dict[int, Venue]
+    home_of: dict[str, int]
+
+    def stadium(self, team: str, venue_id: int | None = None) -> Venue | None:
+        if venue_id is not None and venue_id in self.venues:
+            return self.venues[venue_id]
+        home_id = self.home_of.get(team)
+        return self.venues.get(home_id) if home_id is not None else None
+
+    def home_field(
+        self,
+        home: str,
+        away: str,
+        *,
+        neutral: bool = False,
+        venue_id: int | None = None,
+    ) -> float:
+        if neutral:
+            return 0.0
+        return home_field_points(
+            self.stadium(home, venue_id),
+            self.stadium(away),
+            neutral=False,
+        )
+
+
+def load_context(season: int, rows: list[dict] | None = None) -> Context:
+    """Build a season context. `rows` avoids a second full-season games fetch."""
+    return Context(
+        venues=load(),
+        home_of=team_venues_from(rows) if rows is not None else team_venues(season),
+    )

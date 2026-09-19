@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-LINEAGE_VERSION = "2026.09-current-year-sim-mean"
+LINEAGE_VERSION = "2026.09-independent-venue-fcs"
 STATUS = "CHALLENGER/UNPROMOTED"
 SOURCE_LINEAGE = (
     "chase-analytics-brain/core/genesis/sports/cfb.py",

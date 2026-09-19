@@ -77,6 +77,18 @@ def test_fcs_opponents_pool_into_one_rating():
     assert "Tiny" not in r and "Other" not in r
 
 
+def test_a_frequent_fcs_opponent_is_rated_as_itself():
+    """Buy-game padding is less free when the same FCS side keeps showing up."""
+    games = (
+        [g(w, "A", "Montana", 42, 10, away_is_fbs=False) for w in range(1, 5)]
+        + [g(1, "B", "Once", 55, 3, away_is_fbs=False)]
+    )
+    r = R.build(games)
+    assert f"{R.FCS}:Montana" in r
+    assert "Once" not in r
+    assert R.FCS in r
+
+
 def test_empty_input_is_empty_not_a_crash():
     assert R.build([]) == {}
 

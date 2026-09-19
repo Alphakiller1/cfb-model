@@ -119,6 +119,7 @@ class TestEdgePublication:
         assert f.edge_withheld_reason is None
 
     def test_withholding_does_not_change_the_published_margin(self):
-        """lam = 0 still publishes the price; this rule is about labelling."""
+        """Withholding the edge label does not change the independent number."""
         f = fc.game(home="A", away="B", team_ratings=RATINGS, market_margin=30.0)
-        assert f.margin == pytest.approx(30.0)
+        assert f.margin == pytest.approx(f.model_margin)
+        assert f.edge_points is None
