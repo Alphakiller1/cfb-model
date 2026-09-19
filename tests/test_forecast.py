@@ -163,7 +163,7 @@ def test_scoreline_reflects_the_predictive_margin():
     """The headline score must reconcile to the forecast users are shown."""
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form(),
-                market_margin=1.0)
+                market_margin=1.0, simulations=0)
     assert f.margin == pytest.approx(1.0)          # published = market
     spread = f.projected_home_score - f.projected_away_score
     assert spread == pytest.approx(f.margin)
@@ -222,3 +222,29 @@ def test_total_edge_is_none_without_a_market_total():
     f = fc.game(home="A", away="B", team_ratings=RATINGS,
                 home_form=_paced_form(), away_form=_paced_form())
     assert f.total_edge is None
+
+
+def test_projected_score_is_the_mean_of_simulations():
+    """A single draw is noise; the published score is the average of 10,000."""
+    f = fc.game(home="A", away="B", team_ratings=RATINGS,
+                home_form=_paced_form(), away_form=_paced_form(),
+                market_margin=7.0, market_total=55.0, week=3, season=2026)
+    closed = fc.game(home="A", away="B", team_ratings=RATINGS,
+                     home_form=_paced_form(), away_form=_paced_form(),
+                     market_margin=7.0, market_total=55.0, week=3, season=2026,
+                     simulations=0)
+    assert f.simulations == 10_000
+    assert f.projected_home_score != pytest.approx(closed.projected_home_score, abs=1e-9)
+    assert f.projected_home_score == pytest.approx(closed.projected_home_score, abs=0.6)
+    assert f.win_probability == pytest.approx(f.simulated_win_probability)
+    assert f.total_basis.endswith("_sim_mean")
+
+
+def test_the_same_matchup_reprints_the_same_simulated_score():
+    kwargs = dict(home="A", away="B", team_ratings=RATINGS,
+                  home_form=_paced_form(), away_form=_paced_form(),
+                  market_margin=7.0, market_total=55.0, week=3, season=2026)
+    first = fc.game(**kwargs)
+    second = fc.game(**kwargs)
+    assert first.projected_home_score == second.projected_home_score
+    assert first.projected_away_score == second.projected_away_score

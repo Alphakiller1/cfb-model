@@ -118,5 +118,35 @@ def test_negative_margin_favours_the_away_side():
 def test_scoreline_accepts_an_already_selected_forecast():
     p = totals.scoreline(7.0, 51.0, modelled=True, basis="draftkings_anchored")
     assert p.home_score - p.away_score == pytest.approx(7.0)
-    assert p.home_score + p.away_score == pytest.approx(51.0)
+    assert p.total == pytest.approx(51.0)
     assert p.basis == "draftkings_anchored"
+
+
+def test_one_current_season_game_is_enough_for_a_scoring_prior():
+    """The previous-season prior needs five games; this year cannot wait that long."""
+    games = [ratings.Game(
+        week=1, home="A", away="B", home_points=42, away_points=10,
+        home_is_fbs=True, away_is_fbs=True,
+    )]
+    assert totals.preseason_context(games) is None
+    current = totals.preseason_context(games, min_games=1)
+    assert current is not None
+    assert "A" in current.profiles
+
+
+def test_current_season_scoring_is_blended_in_after_week_one():
+    prior_ctx = totals.preseason_context(_prior_games())
+    current = [ratings.Game(
+        week=1, home="A", away="B", home_points=56, away_points=3,
+        home_is_fbs=True, away_is_fbs=True,
+    )]
+    week1 = totals.matchup_total_prior(
+        "A", "B", prior=prior_ctx, current_games=current, week=1)
+    week3 = totals.matchup_total_prior(
+        "A", "B", prior=prior_ctx, current_games=current, week=3)
+    prior_only = totals.preseason_total("A", "B", prior_ctx)
+    assert week1 == pytest.approx(prior_only)
+    assert week3 != pytest.approx(prior_only)
+    # Week 3 keeps most of last year (28% this year) but has moved toward
+    # the high-scoring 2026 result.
+    assert abs(week3 - prior_only) > 0.0

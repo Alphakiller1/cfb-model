@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cfbmodel import calibration, matrix, ratings, totals
+from cfbmodel import calibration, matrix, ratings, simulate, totals
 from cfbmodel.authority import Action, Authority, current
 
 # Fraction of model-vs-market disagreement retained. See module docstring.
@@ -112,6 +112,9 @@ class Forecast:
     book_total: float | None = None
     book_last_update: str | None = None
     book_commence_time: str | None = None
+    simulations: int = 0
+    simulated_margin: float | None = None
+    simulated_win_probability: float | None = None
 
     @property
     def has_price(self) -> bool:
@@ -210,6 +213,8 @@ def game(
     book: object | None = None,
     preseason_total: float | None = None,
     total_lam: float | None = None,
+    season: int | None = None,
+    simulations: int | None = None,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -278,6 +283,29 @@ def game(
         modelled=independent_projection.modelled,
         basis=total_basis,
     )
+    sim_n = simulate.DEFAULT_SIMULATIONS if simulations is None else simulations
+    sim_margin = None
+    sim_win = None
+    if (sim_n > 0 and published is not None and predictive_total is not None
+            and projection.home_score is not None):
+        summary = simulate.average_outcomes(
+            margin=published,
+            total=predictive_total,
+            n=sim_n,
+            seed=simulate.matchup_seed(home, away, season=season, week=week),
+        )
+        projection = totals.Projection(
+            total=predictive_total,
+            home_score=summary.home_score,
+            away_score=summary.away_score,
+            modelled=independent_projection.modelled,
+            basis=f"{projection.basis}_sim_mean",
+        )
+        sim_margin = summary.margin
+        sim_win = summary.win_probability
+        win_p = summary.win_probability
+    else:
+        sim_n = 0
     return Forecast(
         home=home, away=away, neutral=neutral,
         raw_model_margin=raw_model_margin,
@@ -310,4 +338,7 @@ def game(
         book_total=book_total,
         book_last_update=getattr(book, "last_update", None),
         book_commence_time=getattr(book, "commence_time", None),
+        simulations=sim_n,
+        simulated_margin=sim_margin,
+        simulated_win_probability=sim_win,
     )

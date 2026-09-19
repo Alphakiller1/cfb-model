@@ -120,12 +120,15 @@ class PreseasonContext:
     league_team_points: float
 
 
-def preseason_context(games: list[Game]) -> PreseasonContext | None:
-    """Build scoring priors from a fully completed previous season.
+def preseason_context(games: list[Game], *,
+                      min_games: int = PRESEASON_MIN_GAMES) -> PreseasonContext | None:
+    """Build scoring priors from completed games.
 
     Only FBS-vs-FBS games enter the profile, matching the slate being forecast.
-    A five-game minimum prevents a partial/transition season from masquerading
-    as a stable team scoring level.
+    The previous-season prior keeps a five-game minimum so a partial season
+    cannot masquerade as a stable scoring level. Current-season form may pass
+    ``min_games=1``: two weeks of 2026 scores are noisy, but they are this
+    year's scores, and withholding them is how a board stays stuck on 2025.
     """
     accumulator: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     for game in games:
@@ -142,7 +145,7 @@ def preseason_context(games: list[Game]) -> PreseasonContext | None:
                              points_allowed / games_played,
                              int(games_played))
         for team, (points_for, points_allowed, games_played) in accumulator.items()
-        if games_played >= PRESEASON_MIN_GAMES
+        if games_played >= min_games
     }
     if not profiles:
         return None
@@ -174,6 +177,37 @@ def preseason_total(home: str, away: str,
     c = PRESEASON_COEFFICIENTS
     return (c["intercept"] + c["offense_sum"] * offense_sum
             + c["defense_sum"] * defense_sum)
+
+
+def matchup_total_prior(
+    home: str,
+    away: str,
+    *,
+    prior: PreseasonContext | None,
+    current_games: list[Game] | None = None,
+    week: int,
+) -> float | None:
+    """Blend last season's scoring prior with this season's observed scoring.
+
+    The share follows the same per-completed-week schedule as the power
+    ratings: nothing current in week 1, then 14% more of this year for every
+    week already played. A team that has not yet scored in FBS-vs-FBS play
+    keeps the prior rather than being treated as average.
+    """
+    from cfbmodel.preseason import IN_SEASON_SHARE_PER_WEEK
+
+    prior_value = preseason_total(home, away, prior)
+    current_value = None
+    if current_games:
+        current_value = preseason_total(
+            home, away, preseason_context(current_games, min_games=1),
+        )
+    if current_value is None:
+        return prior_value
+    if prior_value is None:
+        return current_value
+    share = min(1.0, max(0.0, (week - 1) * IN_SEASON_SHARE_PER_WEEK))
+    return share * current_value + (1.0 - share) * prior_value
 
 
 def _pace_complete(form: matrix.TeamForm) -> bool:

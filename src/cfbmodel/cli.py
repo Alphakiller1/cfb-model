@@ -67,15 +67,7 @@ def build_rating_bundle(season: int, week: int) -> RatingBundle:
     extra = preseason.roster_features(season)
     components = preseason.components(season, p1, p2, extra)
     prior = {team: component.rating for team, component in components.items()}
-    # Current-season full-year `/games` queries are large enough to return 502
-    # while the same week-scoped requests succeed. Only completed weeks can
-    # inform this forecast, so ask for exactly those weeks and no future slate.
-    current_rows: list[dict] = []
-    for completed_week in range(1, week):
-        current_rows.extend(cfbd.games(
-            season, week=completed_week, completed_only=True,
-        ))
-    live = ratings.build(_to_games(current_rows))
+    live = ratings.build(_current_season_games(season, week))
     return RatingBundle(preseason.blend(prior, live, week), components, live)
 
 
@@ -83,11 +75,37 @@ def build_ratings(season: int, week: int) -> dict[str, float]:
     return build_rating_bundle(season, week).table
 
 
+def _current_season_games(season: int, week: int) -> list[ratings.Game]:
+    """Scored games from `season` strictly before `week`.
+
+    Current-season full-year `/games` queries are large enough to return 502
+    while the same week-scoped requests succeed. Only past weeks can inform
+    this forecast, so ask for exactly those weeks and no future slate.
+
+    Uses recorded scores rather than CFBD's `completed` flag. The flag can lag
+    a final by hours, and requiring it is how a current-season rating table
+    silently stays empty while the scores are already on the box score.
+    """
+    rows: list[dict] = []
+    for completed_week in range(1, week):
+        rows.extend(cfbd.games(season, week=completed_week))
+    return _to_games(rows)
+
+
 def _preseason_totals(season: int) -> totals.PreseasonContext | None:
     """Previous-season scoring context, known before the current season starts."""
     prior = _prior_season(season)
     games = _to_games(cfbd.games(prior, completed_only=True))
     return totals.preseason_context(games)
+
+
+def _total_prior(home: str, away: str, week: int,
+                 prior: totals.PreseasonContext | None,
+                 current_games: list[ratings.Game]) -> float | None:
+    """Last year's scoring prior blended with this year's observed scoring."""
+    return totals.matchup_total_prior(
+        home, away, prior=prior, current_games=current_games, week=week,
+    )
 
 
 def _forms(season: int, week: int) -> dict[str, matrix.TeamForm]:
@@ -194,6 +212,7 @@ def cmd_board(args: argparse.Namespace) -> int:
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
     preseason_totals = _preseason_totals(args.season)
+    current_games = _current_season_games(args.season, args.week)
     slate = [g for g in cfbd.games(args.season, week=args.week)
              if g.get("homeClassification") == "fbs" and g.get("awayClassification") == "fbs"]
     if not slate:
@@ -209,9 +228,11 @@ def cmd_board(args: argparse.Namespace) -> int:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_tot.get((home, away)),
-            preseason_total=totals.preseason_total(home, away, preseason_totals),
+            preseason_total=_total_prior(
+                home, away, args.week, preseason_totals, current_games),
             authority=auth,
             week=args.week,
+            season=args.season,
         )
         rows.append((f, site._parse_kickoff(g.get("startDate"))))
 
@@ -277,6 +298,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     market = _market(args.season, args.week)
     market_tot = _market_totals(args.season, args.week)
     preseason_totals = _preseason_totals(args.season)
+    current_games = _current_season_games(args.season, args.week)
     try:
         from cfbmodel.sources import oddsapi
         from cfbmodel import teams as teams_mod
@@ -298,9 +320,10 @@ def cmd_export(args: argparse.Namespace) -> int:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_tot.get((home, away)),
-            preseason_total=totals.preseason_total(home, away, preseason_totals),
+            preseason_total=_total_prior(
+                home, away, args.week, preseason_totals, current_games),
             book=book_lines.get((home, away)),
-            authority=auth, week=args.week,
+            authority=auth, week=args.week, season=args.season,
         )
         rows.append((f, site._parse_kickoff(g.get("startDate"))))
 

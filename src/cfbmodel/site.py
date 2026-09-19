@@ -703,6 +703,23 @@ uses the freshest timestamp-verified DraftKings line because the independent mod
 not improve it in season-held-out testing. Totals retain only the small independent share
 that survived the same test. The full independent estimates remain visible as diagnostics.</p></div>
 
+<div class="mth-card"><div class="mth-h">Current-season form</div>
+<p>Ratings and scoring priors start from last year, then fold in this year&rsquo;s
+scored games as they arrive &mdash; 14% of the blend per completed week, the
+share measured on weeks 1&ndash;4. A final that CFBD has not yet flagged
+<code>completed</code> still counts if both scores are on the box. Week 1 is
+still last year only; by week 3 this year already carries 28% of the rating
+and of the scoring prior, on top of opponent-adjusted efficiency from the
+games already played.</p></div>
+
+<div class="mth-card"><div class="mth-h">Simulated scoreline</div>
+<p>The published score is the mean of 10,000 independent draws from the residual
+margin (SD 24.2) and total (SD 16.36). That is the sample size where the
+standard error of the mean (~0.24 pts) sits an order of magnitude below the
+model&rsquo;s MAE, so more draws do not change a displayed score. The stream is
+seeded from the matchup, so a rebuild with the same inputs reprints the same
+board. Mean scores are the projection; a single draw is not.</p></div>
+
 <div class="mth-card"><div class="mth-h">Predictive ensemble</div>
 <p>A nested leave-one-season-out audit covered 3,702 games from 2021–2025. In Week 2,
 market margin MAE was 11.49 versus 12.62 for the independent model; a trained blend was
@@ -855,6 +872,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
     comps = rating_bundle.components
     forms = cli._forms(season, week)
     preseason_totals = cli._preseason_totals(season)
+    current_games = cli._current_season_games(season, week)
     market_rows = cli.consensus_lines(season, week)
     market, market_total = cli._markets(market_rows)
     # Fetch only weeks whose games can affect this build. The unbounded current-
@@ -885,9 +903,10 @@ def build(*, season: int, week: int, out: Path) -> Path:
             home_form=forms.get(home), away_form=forms.get(away),
             market_margin=market.get((home, away)),
             market_total=market_total.get((home, away)),
-            preseason_total=totals.preseason_total(home, away, preseason_totals),
+            preseason_total=cli._total_prior(
+                home, away, week, preseason_totals, current_games),
             book=book_lines.get((home, away)),
-            authority=authority, week=week,
+            authority=authority, week=week, season=season,
         )
         moment = _parse_kickoff(g.get("startDate"))
         rows.append(Row(forecast, _kickoff_label(moment), forms.get(home),

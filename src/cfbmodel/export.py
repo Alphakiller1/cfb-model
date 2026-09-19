@@ -35,10 +35,10 @@ from typing import Any
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
 from cfbmodel import ratings as ratings_mod
-from cfbmodel import teams
+from cfbmodel import simulate, teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "3.0.0"
+SCHEMA_VERSION = "3.1.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -71,6 +71,9 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
         "market_gap": forecast.market_gap,
         "edge_withheld_reason": forecast.edge_withheld_reason,
         "win_probability": forecast.win_probability,
+        "simulations": forecast.simulations,
+        "simulated_margin": forecast.simulated_margin,
+        "simulated_win_probability": forecast.simulated_win_probability,
         "projected_total": forecast.projected_total,
         "independent_total": forecast.independent_total,
         "total_model_weight": forecast.total_model_weight,
@@ -135,6 +138,7 @@ def payload(
             "in_validated_regime": week >= fc.FIRST_VALIDATED_WEEK,
         },
         "lam": fc.DEFAULT_LAM,
+        "simulations": simulate.DEFAULT_SIMULATIONS,
         "total_model_weights": {
             "by_week": fc.TOTAL_MODEL_WEIGHT_BY_WEEK,
             "mature": fc.MATURE_TOTAL_MODEL_WEIGHT,
