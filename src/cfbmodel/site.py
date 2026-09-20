@@ -1040,6 +1040,19 @@ def build(*, season: int, week: int, out: Path) -> Path:
                        authority=authority, generated_at=generated_at),
         out.parent / "board.json",
     )
+    export.write(
+        export.public_slate(
+            season=season,
+            week=week,
+            slate_games=slate,
+            forecasts=board_rows,
+            forms=forms,
+            season_games=season_games,
+            venue_ctx=venues,
+            generated_at=generated_at,
+        ),
+        out.parent / "slate.json",
+    )
     (out.parent / "build.json").write_text(
         json.dumps(health, indent=2) + "\n", encoding="utf-8"
     )

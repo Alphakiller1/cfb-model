@@ -154,6 +154,212 @@ def write(payload_dict: dict[str, Any], out: Path) -> Path:
     return out
 
 
+# -- public research slate ---------------------------------------------------
+# chase-analytics.com fetches this, not board.json. Board carries margins,
+# prices, and may_bet; this file is observed identity, venue, and opponent-
+# adjusted efficiency rates ranked against the FBS pool that published them.
+# A rank always sits beside the value it was computed from.
+
+PUBLIC_SLATE_SCHEMA = "chase-public-slate/1"
+
+_PUBLIC_FORM_FIELDS = (
+    ("off_successRate", "Offense success rate", "high", "pct"),
+    ("off_explosiveness", "Offense explosiveness", "high", "num"),
+    ("off_ppa", "Offense PPA per play", "high", "ppa"),
+    ("off_stuffRate", "Offense stuffed rate", "low", "pct"),
+    ("def_successRate", "Success rate allowed", "low", "pct"),
+    ("def_explosiveness", "Explosiveness allowed", "low", "num"),
+    ("def_ppa", "PPA allowed", "low", "ppa"),
+    ("def_stuffRate", "Stuff rate generated", "high", "pct"),
+)
+
+_PUBLIC_FORBIDDEN = {
+    "model_margin", "market_margin", "market_gap", "published_margin",
+    "edge_points", "edge_withheld_reason", "win_probability",
+    "projected_away_score", "projected_home_score", "projected_total",
+    "may_bet", "authority", "book", "action", "rating", "efficiency_margin",
+    "raw_model_margin", "lean", "pick",
+}
+
+
+def _rank(pool: list[float], value: float, better: str) -> int:
+    if better == "high":
+        return 1 + sum(1 for other in pool if other > value + 1e-12)
+    return 1 + sum(1 for other in pool if other < value - 1e-12)
+
+
+def _form_rates(form: Any, pools: dict[str, list[float]]) -> dict[str, Any] | None:
+    if form is None:
+        return None
+    rates: dict[str, Any] = {}
+    for field, label, better, fmt in _PUBLIC_FORM_FIELDS:
+        value = getattr(form, field, None)
+        pool = pools.get(field) or []
+        if value is None or not pool:
+            continue
+        number = float(value)
+        rates[field] = {
+            "label": label,
+            "value": round(number, 4),
+            "better": better,
+            "rank": _rank(pool, number, better),
+            "of": len(pool),
+            "format": fmt,
+        }
+    if not rates:
+        return None
+    blob: dict[str, Any] = {"rates": rates}
+    plays = getattr(form, "plays", None)
+    if plays is not None:
+        blob["plays"] = round(float(plays), 1)
+    return blob
+
+
+def _records(season_games: list[dict[str, Any]]) -> dict[str, str]:
+    wins: dict[str, int] = {}
+    losses: dict[str, int] = {}
+    for game in season_games:
+        if not game.get("completed"):
+            continue
+        home, away = game.get("homeTeam"), game.get("awayTeam")
+        hp, ap = game.get("homePoints"), game.get("awayPoints")
+        if home is None or away is None or hp is None or ap is None:
+            continue
+        if float(hp) > float(ap):
+            wins[home] = wins.get(home, 0) + 1
+            losses[away] = losses.get(away, 0) + 1
+        elif float(ap) > float(hp):
+            wins[away] = wins.get(away, 0) + 1
+            losses[home] = losses.get(home, 0) + 1
+    names = set(wins) | set(losses)
+    return {
+        name: f"{wins.get(name, 0)}-{losses.get(name, 0)}"
+        for name in names
+    }
+
+
+def _travel_bits(venue_ctx: Any, home: str, away: str, *,
+                 venue_id: int | None, neutral: bool) -> dict[str, Any]:
+    if venue_ctx is None or not hasattr(venue_ctx, "stadium"):
+        return {}
+    from cfbmodel import venue as venue_mod
+    home_venue = venue_ctx.stadium(home, venue_id if not neutral else None)
+    away_venue = venue_ctx.stadium(away)
+    out: dict[str, Any] = {}
+    if home_venue and home_venue.name:
+        out["venue"] = home_venue.name
+        if home_venue.dome is True:
+            out["roof"] = "Dome"
+            out["surface"] = "Indoor"
+        elif home_venue.dome is False:
+            out["roof"] = "Outdoor"
+    miles = venue_mod.distance_miles(home_venue, away_venue) if home_venue and away_venue else None
+    if miles is not None:
+        out["away_travel"] = f"{miles:.0f} miles"
+        out["away_travel_km"] = round(miles * 1.60934, 1)
+        out["home_travel"] = "Home"
+        out["home_travel_km"] = 0
+    shift = venue_mod.timezone_shift(home_venue, away_venue) if home_venue and away_venue else None
+    if shift is not None:
+        out["away_tz_shift"] = round(shift, 2)
+        out["home_tz_shift"] = 0
+    return out
+
+
+def public_slate(
+    *,
+    season: int,
+    week: int,
+    slate_games: list[dict[str, Any]],
+    forecasts: list[tuple[fc.Forecast, datetime | None]],
+    forms: dict[str, Any],
+    season_games: list[dict[str, Any]] | None = None,
+    venue_ctx: Any = None,
+    generated_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Allowlisted public matchup payload. Never carries a priced or forecast field."""
+    stamp = (generated_at or datetime.now(timezone.utc)).replace(microsecond=0)
+    pools: dict[str, list[float]] = {field: [] for field, *_ in _PUBLIC_FORM_FIELDS}
+    for form in forms.values():
+        for field, *_ in _PUBLIC_FORM_FIELDS:
+            value = getattr(form, field, None)
+            if value is not None:
+                pools[field].append(float(value))
+    records = _records(season_games or slate_games)
+    by_matchup = {(f.away, f.home): (f, kickoff) for f, kickoff in forecasts}
+    games: list[dict[str, Any]] = []
+    for raw in slate_games:
+        away, home = raw.get("awayTeam"), raw.get("homeTeam")
+        if not away or not home:
+            continue
+        pair = by_matchup.get((away, home))
+        kickoff = pair[1] if pair else None
+        forecast = pair[0] if pair else None
+        away_meta = teams.get(season, away)
+        home_meta = teams.get(season, home)
+        venue_id = None
+        try:
+            venue_id = int(raw["venueId"]) if raw.get("venueId") is not None else None
+        except (TypeError, ValueError):
+            venue_id = None
+        neutral = bool(raw.get("neutralSite") if forecast is None else forecast.neutral)
+        completed = bool(raw.get("completed"))
+        state = "final" if completed and raw.get("homePoints") is not None else "scheduled"
+        kickoff_iso = (
+            kickoff.isoformat().replace("+00:00", "Z") if kickoff else None
+        )
+        row: dict[str, Any] = {
+            "id": f"{away_meta.short}@{home_meta.short}",
+            "sport": "cfb",
+            "game_state": state,
+            "kickoff_utc": kickoff_iso,
+            "away": away_meta.short,
+            "home": home_meta.short,
+            "away_name": away,
+            "home_name": home,
+            "away_conference": away_meta.conference,
+            "home_conference": home_meta.conference,
+            "away_logo": away_meta.logo,
+            "home_logo": home_meta.logo,
+            "away_record": records.get(away),
+            "home_record": records.get(home),
+            "away_score": raw.get("awayPoints") if completed else None,
+            "home_score": raw.get("homePoints") if completed else None,
+            "venue_id": venue_id,
+            "neutral": True if neutral else None,
+            "away_form": _form_rates(forms.get(away), pools),
+            "home_form": _form_rates(forms.get(home), pools),
+        }
+        row.update(_travel_bits(venue_ctx, home, away, venue_id=venue_id, neutral=neutral))
+        games.append({key: value for key, value in row.items() if value is not None and value != ""})
+
+    games.sort(key=lambda g: (g.get("kickoff_utc") or "9999", g.get("id") or ""))
+    payload = {
+        "schema": PUBLIC_SLATE_SCHEMA,
+        "sport": "cfb",
+        "season": season,
+        "week": week,
+        "generated_at_utc": stamp.isoformat().replace("+00:00", "Z"),
+        "games": games,
+    }
+    leaked = _PUBLIC_FORBIDDEN & set(_walk_keys(payload))
+    if leaked:
+        raise RuntimeError("public CFB slate leaked private keys: " + ", ".join(sorted(leaked)))
+    return payload
+
+
+def _walk_keys(obj: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            found.add(str(key))
+            found |= _walk_keys(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            found |= _walk_keys(value)
+    return found
+
+
 # -- power ratings -----------------------------------------------------------
 # The board answers "what happens Saturday"; the rating answers "how good is
 # this team". They are different payloads and are versioned separately, because

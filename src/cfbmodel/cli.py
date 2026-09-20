@@ -384,12 +384,26 @@ def cmd_export(args: argparse.Namespace) -> int:
         )
         rows.append((f, site._parse_kickoff(g.get("startDate"))))
 
-    out = export.write(
+    out = Path(args.out)
+    export.write(
         export.payload(season=args.season, week=args.week, rows=rows, authority=auth),
-        Path(args.out),
+        out,
+    )
+    export.write(
+        export.public_slate(
+            season=args.season,
+            week=args.week,
+            slate_games=slate,
+            forecasts=rows,
+            forms=forms,
+            season_games=slate,
+            venue_ctx=venues,
+        ),
+        out.parent / "slate.json",
     )
     neutral = sum(1 for f, _ in rows if f.neutral)
     print(f"  wrote {out}  ({len(rows)} games, {neutral} neutral-site, kickoff order)")
+    print(f"  wrote {out.parent / 'slate.json'}  (public matchup slate)")
     print(f"  authority: {auth.level.value}  may_bet={auth.may_bet}")
     return 0
 
