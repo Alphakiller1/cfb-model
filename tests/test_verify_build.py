@@ -55,3 +55,10 @@ def test_a_spent_allowance_still_blocks_an_unsound_board(tmp_path):
     thin_book["odds"] = {"slate_games": 57, "slate_matched": 4,
                          "requested_book": "draftkings", "state": "fresh"}
     assert any("coverage" in e for e in verify(_write(tmp_path, thin_book)))
+
+
+def test_spent_allowance_ships_a_thin_but_usable_book(tmp_path):
+    usable = _manifest(cfbd_quota_spent=True)
+    usable["odds"] = {"slate_games": 57, "slate_matched": 24,
+                      "requested_book": "draftkings", "state": "fresh"}
+    assert verify(_write(tmp_path, usable)) == []

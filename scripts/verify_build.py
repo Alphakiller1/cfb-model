@@ -23,9 +23,21 @@ def verify(path: Path) -> list[str]:
     if slate and matched <= 0:
         errors.append("no configured-sportsbook lines matched the slate")
     minimum = float(os.getenv("CFB_MIN_BOOK_COVERAGE", "0.50"))
-    if slate and matched / slate < minimum:
+    coverage = (matched / slate) if slate else 0.0
+    # A spent CFBD allowance already ships a disclosed degraded board. Blocking
+    # that board on a 50% book floor also blocked the research slate (unit
+    # rates, records, travel) which carries no prices. Keep a floor so a
+    # handful of matched lines cannot pass, but allow a thin-yet-usable book
+    # when the provider outage is already disclosed.
+    degraded_floor = 0.25 if payload.get("cfbd_quota_spent") else minimum
+    if slate and coverage < degraded_floor:
         errors.append(
-            f"sportsbook coverage {matched}/{slate} is below {minimum:.0%}"
+            f"sportsbook coverage {matched}/{slate} is below {degraded_floor:.0%}"
+        )
+    elif slate and coverage < minimum:
+        print(
+            f"[WARN] sportsbook coverage {matched}/{slate} is below {minimum:.0%} "
+            "(shipping a disclosed degraded board; research slate has no prices)"
         )
     requested = str(odds.get("requested_book") or "").lower()
     if requested != "draftkings":

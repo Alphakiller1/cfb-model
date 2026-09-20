@@ -48,6 +48,8 @@ def test_public_slate_ranks_form_and_drops_prices():
     stuff = game["away_form"]["rates"]["off_stuffRate"]
     assert stuff["better"] == "low"
     assert stuff["rank"] == 2  # 0.3 stuffed is worse than 0.1
+    assert game["home_recent"][0]["won"] is True
+    assert game["away_recent"][0]["won"] is False
     leaked = export._PUBLIC_FORBIDDEN & export._walk_keys(payload)
     assert not leaked
 

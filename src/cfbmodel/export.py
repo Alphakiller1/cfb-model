@@ -212,6 +212,9 @@ def _form_rates(form: Any, pools: dict[str, list[float]]) -> dict[str, Any] | No
     plays = getattr(form, "plays", None)
     if plays is not None:
         blob["plays"] = round(float(plays), 1)
+    drives = getattr(form, "drives", None)
+    if drives is not None:
+        blob["drives"] = round(float(drives), 1)
     return blob
 
 
@@ -236,6 +239,34 @@ def _records(season_games: list[dict[str, Any]]) -> dict[str, str]:
         name: f"{wins.get(name, 0)}-{losses.get(name, 0)}"
         for name in names
     }
+
+
+def _recent_results(season_games: list[dict[str, Any]], team: str,
+                    n: int = 5) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for game in season_games:
+        if not game.get("completed"):
+            continue
+        home, away = game.get("homeTeam"), game.get("awayTeam")
+        hp, ap = game.get("homePoints"), game.get("awayPoints")
+        if home is None or away is None or hp is None or ap is None:
+            continue
+        if team not in (home, away):
+            continue
+        is_home = team == home
+        scored = float(hp if is_home else ap)
+        allowed = float(ap if is_home else hp)
+        start = str(game.get("startDate") or game.get("start_date") or "")
+        rows.append({
+            "date": start[:10],
+            "home": is_home,
+            "opponent": away if is_home else home,
+            "scored": int(scored) if scored == int(scored) else scored,
+            "allowed": int(allowed) if allowed == int(allowed) else allowed,
+            "won": scored > allowed,
+        })
+    rows.sort(key=lambda row: row.get("date") or "")
+    return rows[-n:]
 
 
 def _travel_bits(venue_ctx: Any, home: str, away: str, *,
@@ -329,6 +360,8 @@ def public_slate(
             "neutral": True if neutral else None,
             "away_form": _form_rates(forms.get(away), pools),
             "home_form": _form_rates(forms.get(home), pools),
+            "away_recent": _recent_results(season_games or slate_games, away) or None,
+            "home_recent": _recent_results(season_games or slate_games, home) or None,
         }
         row.update(_travel_bits(venue_ctx, home, away, venue_id=venue_id, neutral=neutral))
         games.append({key: value for key, value in row.items() if value is not None and value != ""})
