@@ -285,11 +285,15 @@ def _espn_fallback(
 
 
 def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
-                min_remaining: int = 20) -> dict[tuple[str, str], BookLine]:
+                min_remaining: int = 20,
+                needed: set[tuple[str, str]] | None = None) -> dict[tuple[str, str], BookLine]:
     """(home_school, away_school) -> the best available book line.
 
     Refuses to spend when the quota is nearly gone, so a scheduled build cannot
-    silently drain the key.
+    silently drain the key. ``needed`` is the slate's open games: when ESPN's
+    scoreboard already carries the requested book's spread and total for all of
+    them, no paid request is made (game lines are free there; the Odds API
+    allowance is kept for what only it prices).
     """
     global _LAST_STATUS
     env_requested = tuple(
@@ -303,6 +307,13 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
             "The CFB board is single-book; set ODDS_BOOKMAKERS to exactly one sportsbook."
         )
     requested_book = requested[0]
+    free_first = os.getenv("CFB_GAME_LINES_FREE_FIRST", "1").lower() not in {"0", "false", "no"}
+    if needed and free_first:
+        espn = _espn_fallback(team_meta, requested_book, None, "free first")
+        complete = {k for k, line in espn.items()
+                    if line.home_spread is not None and line.total is not None}
+        if set(needed) <= complete:
+            return espn
     reuse = os.getenv("CFB_REUSE_ODDS_CACHE", "").lower() in {"1", "true", "yes"}
     left = None if reuse else remaining()
     if not reuse and left is not None and left < min_remaining:
