@@ -246,6 +246,44 @@ def _number(value, *, low: float, high: float) -> float | None:
     return number if low <= number <= high else None
 
 
+def _espn_fallback(
+    team_meta: dict, requested: str, left: int | None, reason: str
+) -> dict[tuple[str, str], BookLine]:
+    """The same book's lines from ESPN's scoreboard when the Odds API cannot serve.
+
+    Still exactly one book: ESPN must name the requested book as its provider.
+    An empty map lets the caller's original failure stand.
+    """
+    global _LAST_STATUS
+    from . import espn_odds
+
+    try:
+        quotes, fetched = espn_odds.lines(requested)
+    except Exception:
+        return {}
+    index = build_index(team_meta)
+    out: dict[tuple[str, str], BookLine] = {}
+    unmatched = 0
+    for q in quotes:
+        home = match_team(q["home_name"], index)
+        away = match_team(q["away_name"], index)
+        if not home or not away or (q["home_spread"] is None and q["total"] is None):
+            unmatched += 1
+            continue
+        out[(home, away)] = BookLine(
+            book=requested, book_title="DraftKings" if requested == "draftkings" else requested,
+            home_spread=q["home_spread"], total=q["total"], last_update=fetched,
+            commence_time=q["commence_time"],
+        )
+    if not out:
+        return {}
+    _LAST_STATUS = OddsStatus(
+        "fresh", requested, fetched, left, len(quotes), len(out), unmatched, stale=False,
+        error=f"{reason}; {requested} lines read from ESPN's scoreboard",
+    )
+    return out
+
+
 def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
                 min_remaining: int = 20) -> dict[tuple[str, str], BookLine]:
     """(home_school, away_school) -> the best available book line.
@@ -272,6 +310,9 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
             "quota_floor", requested_book, None, left, 0, 0, 0,
             error=f"only {left} credits left (floor {min_remaining})",
         )
+        fallback = _espn_fallback(team_meta, requested_book, left, f"Odds API at {left} credits")
+        if fallback:
+            return fallback
         raise QuotaExhausted(f"only {left} Odds API credits left (floor {min_remaining})")
 
     query = {
@@ -287,6 +328,10 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
             "error", requested_book, None, left, 0, 0, 0,
             error=f"{type(exc).__name__}: {exc}",
         )
+        fallback = _espn_fallback(team_meta, requested_book, left,
+                                  f"Odds API {type(exc).__name__}")
+        if fallback:
+            return fallback
         raise
     index = build_index(team_meta)
     out: dict[tuple[str, str], BookLine] = {}
@@ -319,7 +364,7 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
             home_spread=spread, total=total, last_update=book.get("last_update"),
             commence_time=event.get("commence_time"),
         )
-    _LAST_STATUS = OddsStatus(
+    status = OddsStatus(
         "fresh" if headers.get("source") == "live" else "cached",
         requested_book=requested_book,
         fetched_at=headers.get("fetched_at"),
@@ -328,5 +373,19 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
         # The disk cache is bounded by CACHE_TTL_SECONDS; it is still a fresh
         # quote snapshot, just served without spending another credit.
         stale=False,
+    )
+    # Games the provider (or a reused cache from another week) did not cover,
+    # or covered without both numbers, take the same book's quote from ESPN.
+    espn = _espn_fallback(team_meta, requested_book, status.remaining, "gap fill")
+    filled = 0
+    for key, line in espn.items():
+        have = out.get(key)
+        if have is None or have.home_spread is None or have.total is None:
+            out[key] = line
+            filled += 1
+    _LAST_STATUS = status if not filled else OddsStatus(
+        status.state, status.requested_book, status.fetched_at, status.remaining,
+        status.events, len(out), status.unmatched, stale=False,
+        error=f"{filled} game(s) filled from ESPN's {requested_book} lines",
     )
     return out
