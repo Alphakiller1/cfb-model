@@ -900,14 +900,16 @@ def build(*, season: int, week: int, out: Path) -> Path:
     # A missing quote is an explicit source state, not an empty dictionary that
     # looks indistinguishable from a successful refresh with no coverage.
     odds_error = None
-    try:
-        book_lines = oddsapi.fetch_lines(teams.load(season))
-    except Exception as exc:
-        book_lines = {}
-        odds_error = f"{type(exc).__name__}: {exc}"
     slate = [g for g in season_games if g.get("week") == week
              and g.get("homeClassification") == "fbs"
              and g.get("awayClassification") == "fbs"]
+    open_games = {(g.get("homeTeam"), g.get("awayTeam")) for g in slate
+                  if not g.get("completed") and g.get("homeTeam") and g.get("awayTeam")}
+    try:
+        book_lines = oddsapi.fetch_lines(teams.load(season), needed=open_games)
+    except Exception as exc:
+        book_lines = {}
+        odds_error = f"{type(exc).__name__}: {exc}"
 
     rows: list[Row] = []
     for g in slate:

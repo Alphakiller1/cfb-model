@@ -51,3 +51,15 @@ def test_espn_quotes_from_another_book_are_never_used(monkeypatch):
         pass
     else:
         raise AssertionError("with no same-book quote the build must still fail closed")
+
+
+def test_complete_free_lines_skip_the_paid_request(monkeypatch):
+    monkeypatch.setattr(oddsapi, "remaining", lambda: 500)
+
+    def paid(*args, **kwargs):
+        raise AssertionError("paid call")
+
+    monkeypatch.setattr(oddsapi, "_get", paid)
+    monkeypatch.setattr(espn_odds, "lines", lambda requested="draftkings": ([QUOTE], "t"))
+    lines = oddsapi.fetch_lines(_meta(), needed={("Alabama", "Auburn")})
+    assert lines[("Alabama", "Auburn")].total == 51.5
