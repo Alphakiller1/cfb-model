@@ -441,6 +441,38 @@ def _season_is_closed(season: int) -> bool:
     return season < _current_season()
 
 
+# How long after a week's last game its advanced rows are treated as final.
+# CFBD publishes and then revises advanced rows after the whistle; four days
+# clears the revision window the partial-Week-1 incident exposed.
+SETTLE_DAYS = int(os.getenv("CFBD_SETTLE_DAYS", "4"))
+
+
+def _week_is_settled(season: int, week: int) -> bool:
+    """True once every FBS game of `week` is final and SETTLE_DAYS have passed.
+
+    A settled week never changes again, so its rows go to the immutable cache.
+    Without this every build re-fetched every completed week of the season -
+    about 25 CFBD calls a build, twice a day, against a 1,000-call monthly
+    allowance - which spent the key in late September 2026 and left the model
+    on preseason ratings with no efficiency at all.
+    """
+    if _season_is_closed(season):
+        return True
+    path = f"/games?year={season}&seasonType=regular&classification=fbs"
+    try:
+        rows = get(path, cacheable=False)
+    except CFBDError:
+        return False
+    week_rows = [g for g in rows if g.get("week") == week]
+    if not week_rows or not all(g.get("completed") for g in week_rows):
+        return False
+    starts = [_parse_stamp(str(g.get("startDate") or g.get("start_date") or "")) for g in week_rows]
+    starts = [s for s in starts if s is not None]
+    if not starts:
+        return False
+    return (_utc_now() - max(starts)).total_seconds() > SETTLE_DAYS * 24 * 60 * 60
+
+
 def _current_season() -> int:
     now = time.gmtime()
     # A CFB season is labelled by the calendar year it starts in; it runs into January.
@@ -484,9 +516,10 @@ def game_advanced_stats(season: int, *, week: int, exclude_garbage_time: bool = 
     # Week 1 response on September 1, before most of the 2026 Week 1 slate had
     # played.  Week 2 then had complete form for only one matchup and silently
     # fell back to preseason ratings for the other 48 games.  Current-season
-    # rows stay in the bounded runtime cache and are refreshed every build;
-    # only a closed season is safe in the immutable cache.
-    return get(path, cacheable=_season_is_closed(season))
+    # rows stay in the bounded runtime cache and are refreshed every build
+    # until the week is settled (all final, past the revision window); from
+    # then on the week is immutable and cached, so it costs no further calls.
+    return get(path, cacheable=_week_is_settled(season, week))
 
 
 def season_game_stats(season: int, *, through_week: int,
