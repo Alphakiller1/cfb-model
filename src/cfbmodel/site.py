@@ -1039,7 +1039,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
     export.write(
         export.payload(season=season, week=week, rows=board_rows,
-                       authority=authority, generated_at=generated_at),
+                       authority=authority, generated_at=generated_at,
+                       player_projections=export.player_projections(season, week, board_rows)),
         out.parent / "board.json",
     )
     export.write(
