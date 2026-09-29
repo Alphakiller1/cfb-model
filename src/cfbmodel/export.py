@@ -107,8 +107,12 @@ def payload(
     rows: list[tuple[fc.Forecast, datetime | None]],
     authority: auth_mod.Authority | None = None,
     generated_at: datetime | None = None,
+    player_projections: tuple[list[dict], dict] | None = None,
 ) -> dict[str, Any]:
-    """Build the export payload. `rows` is (forecast, kickoff) in any order."""
+    """Build the export payload. `rows` is (forecast, kickoff) in any order.
+
+    ``player_projections`` is ``player_props.build_slate``'s (rows, status).
+    """
     auth = authority or auth_mod.current()
     stamp = (generated_at or datetime.now(timezone.utc)).replace(microsecond=0)
     # Chronological, matching the dashboard. Unscheduled games sort last so a
@@ -145,7 +149,22 @@ def payload(
             "mature": fc.MATURE_TOTAL_MODEL_WEIGHT,
         },
         "games": [_game(season, forecast, kickoff) for forecast, kickoff in ordered],
+        "player_projections": (player_projections or ([], {}))[0],
+        "player_projections_status": (player_projections or ([], {}))[1],
     }
+
+
+
+def player_projections(season: int, week: int, rows: list) -> tuple[list[dict], dict]:
+    """The player layer, fail-soft: a feed or code failure publishes an empty
+    list with the reason, never a missing board."""
+    from . import player_props
+
+    try:
+        return player_props.build_slate(season, week, rows)
+    except Exception as exc:  # the game board must still ship
+        return [], {"model_version": player_props.MODEL_VERSION, "games": 0, "players": 0,
+                    "issues": [f"player projections failed: {type(exc).__name__}: {exc}"]}
 
 
 def write(payload_dict: dict[str, Any], out: Path) -> Path:

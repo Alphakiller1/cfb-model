@@ -386,7 +386,8 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     export.write(
-        export.payload(season=args.season, week=args.week, rows=rows, authority=auth),
+        export.payload(season=args.season, week=args.week, rows=rows, authority=auth,
+                       player_projections=export.player_projections(args.season, args.week, rows)),
         out,
     )
     export.write(
