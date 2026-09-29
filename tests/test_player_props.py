@@ -91,3 +91,11 @@ def test_environment_prefers_the_book_then_the_forecast():
     forecast.book_margin = None
     env, source = pp._environment_for(forecast, home=True)
     assert env.margin == -2.0 and env.total == 50.0
+
+
+def test_no_rushing_market_for_a_passer_who_nets_negative_yards():
+    sacked = dict(QB, rush_car=6, rush_yds=-12)
+    boxes = [_box(f"e{w}", w, [("qb", sacked), ("rb", RB), ("wr", WR)], OPP) for w in (1, 2, 3, 4)]
+    qb = next(p for p in pp.project_team(pp.History(boxes), "1", "2", 2026, 5, ENV)
+              if p.athlete_id == "qb")
+    assert "rush_yds" not in qb.metrics and "pass_yds" in qb.metrics

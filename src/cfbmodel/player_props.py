@@ -365,7 +365,9 @@ def project_team(hist: History, team_id: str, opponent_id: str, season: int, wee
         # not caught a pass would otherwise show "0.0 receptions" lines.
         if m["rec"] < 0.5:
             m.pop("rec"), m.pop("rec_yds")
-        if m["rush_car"] < 2.0:
+        # A pocket passer's rushing nets out near zero or below (NCAA scoring
+        # counts sacks), where a ratio-of-projection range is meaningless.
+        if m["rush_car"] < 2.0 or m["rush_yds"] < 8.0:
             m.pop("rush_car"), m.pop("rush_yds")
         # Touchdowns: the player's share of team scoring, shrunk toward his share
         # of touches (TDs are rare enough that a raw share is mostly noise).
