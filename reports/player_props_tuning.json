@@ -1,0 +1,172 @@
+{
+ "grid": {
+  "PLAYER_HALF_LIFE": [
+   2.0,
+   3.0,
+   4.0,
+   6.0
+  ],
+  "PRIOR_SEASON_PLAYER_WEIGHT": [
+   0.1,
+   0.25,
+   0.5
+  ],
+  "QB_ATTEMPT_FLOOR": [
+   0.8,
+   0.88,
+   0.94
+  ]
+ },
+ "fit": 2024,
+ "test": 2025,
+ "shipped": {
+  "PLAYER_HALF_LIFE": 3.0,
+  "PRIOR_SEASON_PLAYER_WEIGHT": 0.25,
+  "QB_ATTEMPT_FLOOR": 0.88
+ },
+ "chosen": {
+  "PLAYER_HALF_LIFE": 2.0,
+  "PRIOR_SEASON_PLAYER_WEIGHT": 0.5,
+  "QB_ATTEMPT_FLOOR": 0.8
+ },
+ "test_shipped": {
+  "mean_ratio_to_naive": 0.9698,
+  "cells": {
+   "pass_yds:QB": {
+    "n": 1154,
+    "model": 66.769,
+    "naive": 70.258
+   },
+   "pass_att:QB": {
+    "n": 1154,
+    "model": 7.315,
+    "naive": 7.669
+   },
+   "pass_cmp:QB": {
+    "n": 1154,
+    "model": 4.994,
+    "naive": 5.243
+   },
+   "pass_td:QB": {
+    "n": 1154,
+    "model": 0.932,
+    "naive": 1.012
+   },
+   "pass_int:QB": {
+    "n": 1154,
+    "model": 0.707,
+    "naive": 0.759
+   },
+   "rush_yds:QB": {
+    "n": 760,
+    "model": 26.179,
+    "naive": 26.505
+   },
+   "rush_yds:RB": {
+    "n": 2689,
+    "model": 29.182,
+    "naive": 30.362
+   },
+   "rush_car:QB": {
+    "n": 760,
+    "model": 3.553,
+    "naive": 3.506
+   },
+   "rush_car:RB": {
+    "n": 2689,
+    "model": 4.081,
+    "naive": 4.118
+   },
+   "rec:RB": {
+    "n": 2070,
+    "model": 1.155,
+    "naive": 1.16
+   },
+   "rec:WR": {
+    "n": 4545,
+    "model": 1.554,
+    "naive": 1.578
+   },
+   "rec_yds:RB": {
+    "n": 2070,
+    "model": 12.221,
+    "naive": 12.327
+   },
+   "rec_yds:WR": {
+    "n": 4545,
+    "model": 25.488,
+    "naive": 26.186
+   }
+  }
+ },
+ "test_chosen": {
+  "mean_ratio_to_naive": 0.9659,
+  "cells": {
+   "pass_yds:QB": {
+    "n": 1158,
+    "model": 66.847,
+    "naive": 70.918
+   },
+   "pass_att:QB": {
+    "n": 1158,
+    "model": 7.32,
+    "naive": 7.687
+   },
+   "pass_cmp:QB": {
+    "n": 1158,
+    "model": 4.999,
+    "naive": 5.268
+   },
+   "pass_td:QB": {
+    "n": 1158,
+    "model": 0.93,
+    "naive": 1.019
+   },
+   "pass_int:QB": {
+    "n": 1158,
+    "model": 0.704,
+    "naive": 0.77
+   },
+   "rush_yds:QB": {
+    "n": 750,
+    "model": 26.589,
+    "naive": 26.994
+   },
+   "rush_yds:RB": {
+    "n": 2691,
+    "model": 29.195,
+    "naive": 30.447
+   },
+   "rush_car:QB": {
+    "n": 750,
+    "model": 3.612,
+    "naive": 3.571
+   },
+   "rush_car:RB": {
+    "n": 2691,
+    "model": 4.073,
+    "naive": 4.119
+   },
+   "rec:RB": {
+    "n": 2058,
+    "model": 1.17,
+    "naive": 1.176
+   },
+   "rec:WR": {
+    "n": 4524,
+    "model": 1.567,
+    "naive": 1.594
+   },
+   "rec_yds:RB": {
+    "n": 2058,
+    "model": 12.374,
+    "naive": 12.481
+   },
+   "rec_yds:WR": {
+    "n": 4524,
+    "model": 25.676,
+    "naive": 26.388
+   }
+  }
+ }
+}
