@@ -49,7 +49,7 @@ class FetchStatus:
     """Provenance for one endpoint used during the current build."""
 
     path: str
-    state: str                 # live | memory | historical_cache | stale_snapshot
+    state: str                 # live | memory | historical_cache | recent_snapshot | stale_snapshot
     fetched_at: str | None
     age_seconds: int | None
     rows: int | None
@@ -204,6 +204,30 @@ def _fresh_limit(path: str) -> int:
     return 24 * 60 * 60
 
 
+# In-season priors that cannot meaningfully move between two builds. Re-fetching
+# them on every run spent ~10 of each build's ~15 live calls: at two to four
+# builds a day that is the whole 1,000-call monthly allowance by mid-month, and
+# the September 2026 outage showed what follows - weeks of ratings-only boards.
+# A snapshot younger than this is reused without a call.
+PRIOR_REUSE_SECONDS = 7 * 24 * 60 * 60
+_PRIOR_PREFIXES = ("/talent", "/player/returning", "/player/portal", "/recruiting/teams",
+                   "/coaches", "/teams/fbs", "/venues", "/stats/season/advanced")
+
+
+def _reuse_limit(path: str) -> int:
+    """How old a last-good snapshot may be and still be served *instead of* a call.
+
+    Zero for anything that moves within a week: the schedule, scores, lines and
+    current-week efficiency are always fetched live.
+    """
+    if not path.startswith(_PRIOR_PREFIXES):
+        return 0
+    # Out of season these feeds are still filling in (the talent composite
+    # publishes team by team in August), so only reuse for a day there.
+    in_season = _utc_now().month in (9, 10, 11, 12, 1)
+    return PRIOR_REUSE_SECONDS if in_season else 24 * 60 * 60
+
+
 def _read_runtime(path: str, *, max_age: int) -> tuple[list | dict, str] | None:
     snapshot = _runtime_path(path)
     if not snapshot.is_file():
@@ -300,6 +324,15 @@ def get(path: str, *, cacheable: bool = True,
                 return data
             except json.JSONDecodeError:
                 hit.unlink(missing_ok=True)  # corrupt entry: refetch
+
+    reuse = 0 if cacheable else _reuse_limit(path)
+    if reuse:
+        recent = _read_runtime(path, max_age=reuse)
+        if recent is not None:
+            data, fetched_at = recent
+            _MEMORY[path] = data
+            _record(path, "recent_snapshot", data, fetched_at=fetched_at)
+            return data
 
     key = _load_env_key()
     if not key:
@@ -398,8 +431,12 @@ def games(season: int, *, season_type: str = "regular", week: int | None = None,
         path += f"&classification={urllib.parse.quote(classification)}"
     if week is not None:
         path += f"&week={week}"
-    # A season still in progress must not be cached, or the tail freezes.
-    cacheable = _season_is_closed(season)
+    # A season still in progress must not be cached, or the tail freezes - but
+    # a single settled week never changes again, exactly as for its advanced
+    # stats. Re-fetching weeks 1..N-1 on every build was four calls a build by
+    # week 5 and growing by one a week.
+    cacheable = _season_is_closed(season) or (
+        week is not None and _week_is_settled(season, week))
     try:
         raw = get(path, cacheable=cacheable)
     except CFBDError:
