@@ -510,8 +510,9 @@ def _record_line(record: dict) -> str:
             bits.append(f"{_FAMILY_LABEL[family]}: no graded picks yet")
             continue
         units = r.get("units", 0.0)
+        clv = f", mean CLV {r['mean_clv']:+.2f}" if r.get("mean_clv") is not None else ""
         bits.append(f"{_FAMILY_LABEL[family]} {r['win']}-{r['loss']}-{r['push']} "
-                    f"({units:+.1f}u)")
+                    f"({units:+.1f}u{clv})")
     return " · ".join(bits) if bits else "No best bets graded yet this season."
 
 
@@ -544,7 +545,8 @@ def _best_bets_section(picks: list, record: dict, week: int) -> str:
 <div class="sec-eyebrow">00 · Picks</div>
 <h2 class="sec-title">Week {esc(week)} Best Bets</h2>
 <p class="sec-blurb">The board&rsquo;s strongest disagreements with DraftKings, each with the
-angle behind it. Hit estimates give the model only the weight it earned against
+angle behind it. Each pick is graded at the line it was first published at.
+Hit estimates give the model only the weight it earned against
 the market in held-out seasons, so they sit close to 50%. Every pick is logged
 before kickoff and graded.
 <b>Season record:</b> {esc(_record_line(record))}. Research picks, not advice: authority

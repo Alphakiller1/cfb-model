@@ -154,21 +154,25 @@ def test_best_bets_are_logged_before_kickoff_and_graded(tmp_path):
     assert summary["prop"]["units"] == round(100 / 115, 3)
 
 
-def test_a_pick_dropped_before_kickoff_is_withdrawn_and_a_dnp_prop_is_void(tmp_path):
+def test_a_published_pick_is_locked_and_a_dnp_prop_is_void(tmp_path):
     path = tmp_path / "ledger.json"
     spread = bb.spread_pick(_row(), season=2026, week=6, ranks={}, team_status={}).to_json()
     quote = PropQuote("Home", "Away", "Lead Back", "rush_yds", 70.5, -115, -105, "dk", None)
     prop = bb.prop_picks([_projection()], [quote], season=2026, week=6)[0].to_json()
     ledger.update(season=2026, week=6, forecasts=[], season_games=[],
                   best_bets=[spread, prop], path=path, recorded_at=NOW)
+    # A later build drops the spread and re-lists the prop at a moved line: the
+    # pick a reader saw first is the one that stays on the record.
+    moved = dict(prop, line=80.5)
     payload = ledger.update(season=2026, week=6, forecasts=[], season_games=[],
-                            best_bets=[prop], path=path, recorded_at=NOW + timedelta(hours=6))
-    assert [b["family"] for b in payload["best_bets"]] == ["prop"]
+                            best_bets=[moved], path=path, recorded_at=NOW + timedelta(hours=6))
+    assert sorted(b["family"] for b in payload["best_bets"]) == ["prop", "spread"]
+    assert next(b for b in payload["best_bets"] if b["family"] == "prop")["line"] == 70.5
     payload = ledger.update(season=2026, week=6, forecasts=[], season_games=[],
                             player_boxes=[_box([PlayerLine(athlete_id="qb-9", name="QB",
                                                            team_id="10", pass_att=30)])],
                             path=path, recorded_at=KICKOFF + timedelta(days=1))
-    assert payload["best_bets"][0]["result"] == "void"
+    assert next(b for b in payload["best_bets"] if b["family"] == "prop")["result"] == "void"
 
 
 def test_game_probabilities_give_the_model_only_its_earned_weight():
