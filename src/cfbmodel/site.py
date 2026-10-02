@@ -1074,6 +1074,15 @@ def build(*, season: int, week: int, out: Path) -> Path:
     failed_reports = [st["source"] for st in availability_status if st.get("state") == "error"]
     if failed_reports:
         issues.append(f"Availability report source(s) unavailable: {', '.join(failed_reports)}")
+    # From week 2 every rated matchup should carry observed form. In September
+    # 2026 weeks 3-5 shipped on preseason ratings alone for days because the
+    # efficiency feed was empty, and nothing on the board said so.
+    if week >= 2:
+        rated = [row for row in rows if row.forecast.model_margin is not None]
+        missing = sum(not row.forecast.used_efficiency for row in rated)
+        if rated and missing > len(rated) // 4:
+            issues.append(f"Observed form missing for {missing} of {len(rated)} games; "
+                          "those forecasts fell back to preseason ratings")
 
     # The odds event and CFBD kickoff should describe the same game. A broad
     # threshold tolerates rescheduling while still catching a wrong team match.

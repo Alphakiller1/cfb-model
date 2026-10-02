@@ -122,7 +122,9 @@ def test_games_requests_only_the_fbs_classification(monkeypatch):
     seen = []
     monkeypatch.setattr(cfbd, "get", lambda path, **kwargs: seen.append(path) or [])
     cfbd.games(2026, week=2)
-    assert seen == ["/games?year=2026&seasonType=regular&classification=fbs&week=2"]
+    # The season schedule is read first to decide whether week 2 is settled.
+    assert seen[-1] == "/games?year=2026&seasonType=regular&classification=fbs&week=2"
+    assert all("classification=fbs" in path for path in seen)
 
 
 def test_nonempty_live_response_is_memoised_within_a_build(cache_dir, monkeypatch):
@@ -149,7 +151,8 @@ def test_failed_endpoint_is_not_retried_again_in_same_build(cache_dir, monkeypat
 
 
 def test_recent_last_good_snapshot_remains_fresh_after_retry_failure(cache_dir, monkeypatch):
-    path = "/player/portal?year=2026"
+    # A path that is always fetched live, so the failure path is what is tested.
+    path = "/stats/game/advanced?year=2026&week=6&excludeGarbageTime=true"
     cfbd._atomic_write(cfbd._runtime_path(path), {
         "path": path,
         "fetched_at": cfbd._stamp(),
@@ -297,3 +300,34 @@ def test_week_scope_falls_back_to_the_season_schedule(cache_dir, monkeypatch):
     rows = cfbd.games(2026, week=3)
 
     assert [g["id"] for g in rows] == [2]
+
+
+def test_in_season_priors_reuse_a_recent_snapshot_instead_of_calling(cache_dir, monkeypatch):
+    """Ten of a build's fifteen live calls were priors that do not move in-season.
+    Spending them every build exhausted the monthly allowance in September 2026."""
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(cfbd, "_current_season", lambda: 2026)
+    monkeypatch.setattr(cfbd, "_utc_now", lambda: datetime(2026, 10, 2, tzinfo=timezone.utc))
+    calls = _stub_response(monkeypatch, [{"team": "Georgia", "talent": 1003.67}])
+    cfbd.get("/talent?year=2026", cacheable=False)
+    cfbd.clear_run_state()                      # the next build
+    assert cfbd.get("/talent?year=2026", cacheable=False)[0]["team"] == "Georgia"
+    assert calls["n"] == 1
+    assert cfbd.status_report()[0]["state"] == "recent_snapshot"
+
+    # A week later the prior is fetched again.
+    monkeypatch.setattr(cfbd, "_utc_now", lambda: datetime(2026, 10, 10, tzinfo=timezone.utc))
+    cfbd.clear_run_state()
+    cfbd.get("/talent?year=2026", cacheable=False)
+    assert calls["n"] == 2
+
+
+def test_lines_and_current_games_are_never_reused(cache_dir, monkeypatch):
+    calls = _stub_response(monkeypatch, [{"id": 1}])
+    for path in ("/lines?year=2026&seasonType=regular&week=6",
+                 "/games?year=2026&seasonType=regular&classification=fbs&week=6"):
+        cfbd.get(path, cacheable=False)
+        cfbd.clear_run_state()
+        cfbd.get(path, cacheable=False)
+    assert calls["n"] == 4
