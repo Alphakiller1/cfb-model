@@ -154,7 +154,8 @@ not as an edge: `edge_points` is `None` outside the validated regime and
 
 `calibration.py` measures the slope that MAE cannot see; run `cfbmodel calibrate`
 to fit it per regime against actual outcomes. Full evidence and the open work —
-venue-specific home field and licensed historical availability data — are in
+venue-specific home field and a fitted college QB-availability term (reports
+are now read live and archived; see `docs/DATA_SOURCES.md`) — are in
 [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
 ## How it fits together
@@ -172,6 +173,7 @@ venue-specific home field and licensed historical availability data — are in
 | `roster.py` | Transfer portal, quarterback-specific returning production. |
 | `coaching.py` | First-year staff, and the tendency profile a hire brings. |
 | `venue.py` | Elevation, travel, and body-clock terms for home field. |
+| `sources/availability.py` | Official conference availability reports (SEC, ACC, Big Ten, Big 12, Pac-12, MAC): removes Out/Doubtful players from projections, withholds the edge when a starting QB is out. |
 | `fitting.py` | Stdlib OLS and the leave-one-season-out adoption harness. |
 | `export.py` | The board as JSON, for downstream renderers. |
 | `ledger.py` | Immutable pre-kickoff quote snapshots and deterministic shadow grading. |

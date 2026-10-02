@@ -332,8 +332,8 @@ def cmd_board(args: argparse.Namespace) -> int:
         print(f"  {when[:22]:<22} {matchup[:40]:<40} {score:>13} {tot:>12} {model:>7} {mkt:>7} {edge:>9}  {f.action.value}{flag}")
     print(f"\n  {len(rows)} games · score is the independent model (away-home); "
           f"sportsbook line is the benchmark it is trying to beat")
-    print(f"  (parenthesised) = information gap, not a cleared edge · "
-          f"authority remains RESEARCH_ONLY at ATS 51.11%\n")
+    print("  (parenthesised) = information gap, not a cleared edge · "
+          "authority remains RESEARCH_ONLY at ATS 51.11%\n")
     return 0
 
 

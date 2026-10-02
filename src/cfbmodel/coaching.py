@@ -23,11 +23,10 @@ earns a coefficient; nothing here modifies a rating on its own.
 
 **What this module cannot see.** Coverage shells, personnel groupings, and
 snap-level formation data are not published by CFBD at any tier — they come from
-charting providers (PFF, SIS) under commercial licence. Injury and availability
-feeds are likewise absent: CFBD has no injuries endpoint, and the public
-alternatives are unofficial scrapes with no historical archive, so they cannot
-be backtested even if scraped. Both gaps are real and neither is closeable from
-this data source; see `docs/DATA_SOURCES.md`.
+charting providers (PFF, SIS) under commercial licence, and that gap is real
+and not closeable from this data source. (Availability is no longer in the same
+bucket: conference availability reports are read by `sources/availability.py`.)
+See `docs/DATA_SOURCES.md` for both.
 """
 
 from __future__ import annotations

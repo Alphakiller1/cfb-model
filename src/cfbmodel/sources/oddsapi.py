@@ -211,7 +211,7 @@ def match_team(name: str, index: dict[str, str]) -> str | None:
     best: str | None = None
     for candidate, school in index.items():
         if key.startswith(candidate) and (best is None or len(candidate) > len(best)):
-            best, matched = candidate, school
+            best = candidate
     return index[best] if best else None
 
 
