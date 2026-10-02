@@ -529,7 +529,7 @@ def _best_bets_section(picks: list, record: dict, week: int) -> str:
 <div class="bb-head"><span class="bb-pick">{esc(pick.selection)}</span>
 <span class="bb-price">{esc(price)}</span></div>
 <div class="bb-meta">{esc(matchup)} · model {pick.model_number:g} vs book {pick.book_number:g}
- · edge {esc(edge)} · {pick.probability:.0%} to hit{tags}</div>
+ · edge {esc(edge)} · est. {pick.probability:.0%} to hit{tags}</div>
 <p class="bb-angle"><b>The angle:</b> {esc(pick.angle)}</p>
 </article>""")
         cards.append(f'<h3 class="bb-family">{_FAMILY_LABEL[family]}</h3>'
@@ -541,7 +541,9 @@ def _best_bets_section(picks: list, record: dict, week: int) -> str:
 <div class="sec-eyebrow">00 · Picks</div>
 <h2 class="sec-title">Week {esc(week)} Best Bets</h2>
 <p class="sec-blurb">The board&rsquo;s strongest disagreements with DraftKings, each with the
-angle behind it. Every pick is logged before kickoff and graded below.
+angle behind it. Hit estimates give the model only the weight it earned against
+the market in held-out seasons, so they sit close to 50%. Every pick is logged
+before kickoff and graded.
 <b>Season record:</b> {esc(_record_line(record))}. Research picks, not advice: authority
 is RESEARCH_ONLY until the record earns otherwise.</p>
 {body}

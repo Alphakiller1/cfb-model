@@ -482,6 +482,13 @@ def _cache_is_fresh(path: str, params: dict, ttl: int) -> bool:
     return cached.is_file() and (time.time() - cached.stat().st_mtime) < ttl
 
 
+def _drop_cached(path: str, params: dict) -> None:
+    key = _load_key()
+    if key:
+        url = f"{BASE}{path}?" + urllib.parse.urlencode({**params, "apiKey": key})
+        _cache_path(url).unlink(missing_ok=True)
+
+
 def fetch_player_props(team_meta: dict, games: list[tuple[str, str, datetime | None]],
                        *, book: str | None = None) -> list[PropQuote]:
     """Prop lines for up to `PROP_GAMES` of ``games`` (in priority order).
@@ -540,7 +547,12 @@ def fetch_player_props(team_meta: dict, games: list[tuple[str, str, datetime | N
             spent += 1
             if headers.get("remaining") is not None:
                 left = int(headers["remaining"])
-        quotes.extend(parse_props(data, home, away, requested))
+        parsed = parse_props(data, home, away, requested)
+        if not parsed:
+            # Not posted yet. An empty pull costs nothing, so drop it rather than
+            # pin "no props" for 30 hours and miss them when they go up.
+            _drop_cached(path, query)
+        quotes.extend(parsed)
     _PROP_STATUS = {"state": "fresh" if spent else "cached" if cached else "unavailable",
                     "games": len(soon), "pulled": spent, "reused": cached,
                     "skipped": skipped, "quotes": len(quotes), "remaining": left}

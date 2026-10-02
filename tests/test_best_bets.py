@@ -96,7 +96,9 @@ def test_prop_pick_prices_the_distribution_against_a_de_vigged_line():
                           ranks=bb.fbs_ranks(FORMS))
     assert len(picks) == 1
     pick = picks[0]
-    assert pick.side == "over" and pick.price == -115 and pick.probability > 0.7
+    assert pick.side == "over" and pick.price == -115
+    # Half-way from the de-vigged price (~0.53) toward the raw model (~0.75).
+    assert 0.58 < pick.probability < 0.68
     assert "62% of team carries" in pick.angle
     assert "Inherits work from Second Back" in pick.angle
     assert "expected to lead" in pick.angle
@@ -167,3 +169,14 @@ def test_a_pick_dropped_before_kickoff_is_withdrawn_and_a_dnp_prop_is_void(tmp_p
                                                            team_id="10", pass_att=30)])],
                             path=path, recorded_at=KICKOFF + timedelta(days=1))
     assert payload["best_bets"][0]["result"] == "void"
+
+
+def test_game_probabilities_give_the_model_only_its_earned_weight():
+    pick = bb.spread_pick(_row(model_margin=13.0, book_margin=3.0), season=2026, week=6,
+                          ranks={}, team_status={})
+    assert pick.edge == 10.0
+    assert 0.54 < pick.probability < 0.56       # not the ~74% a raw Normal would claim
+    early = replace(_row(model_margin=13.0, book_margin=3.0).forecast, in_validated_regime=False)
+    early_pick = bb.spread_pick(site.Row(early, "Sat", None, None, kickoff_utc=KICKOFF),
+                                season=2026, week=3, ranks={}, team_status={})
+    assert early_pick.probability < pick.probability

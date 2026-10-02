@@ -18,9 +18,16 @@ pick rests on power ratings.
 **What these are not.** Authority is ``RESEARCH_ONLY``: the walk-forward ATS
 rate on model disagreements is 51.1% (95% CI 49.4-52.8%) against a 52.4%
 breakeven. These are the board's best *candidates*, published with their own
-graded record (``ledger``) so they can prove themselves or not. Probabilities
-assume a Normal error around the model with the model's measured error, which
-is the model's confidence, not a market-beating claim.
+graded record (``ledger``) so they can prove themselves or not.
+
+**Probabilities are deliberately humble.** The market is the better-informed
+estimator, so a pick's chance of hitting is not the model's own confidence.
+For games it is the chance under ``market + w * (model - market)`` with the
+weights ``w`` the 2021-2025 nested season-held-out test selected
+(reports/PREDICTIVE-OVERHAUL-2026-09-11.md) and the market's error around it.
+A 10-point disagreement is then ~55%, not the ~74% the raw model would claim.
+Props have no measured weight yet, so they count half the model's distance from
+the de-vigged price.
 """
 
 from __future__ import annotations
@@ -30,16 +37,20 @@ from dataclasses import asdict, dataclass, field
 
 from cfbmodel import matrix
 
-# Spread of the independent model's errors (walk-forward MAE 12.5 -> SD ~15.6
-# for a Normal; the README's measured margin SD for CFB is far wider than the
-# NFL's). Totals: residual SD 16.36 (README, totals section).
-SPREAD_SIGMA = 15.6
-TOTAL_SIGMA = 16.4
+# Error of the market around the outcome (closing MAE 12.10 margin, 12.46 total
+# on 3,702 games -> Normal SD = MAE * sqrt(pi/2)).
+SPREAD_SIGMA = 15.2
+TOTAL_SIGMA = 15.6
+# Weight on the model's disagreement, selected season-held-out (overhaul report):
+# margins 0.075 in weeks 1-4 and 0.185 from week 5; totals 0.170 / 0.190.
+MARGIN_WEIGHT = {"early": 0.075, "validated": 0.185}
+TOTAL_WEIGHT = {"early": 0.170, "validated": 0.190}
+PROP_WEIGHT = 0.5
 # A disagreement smaller than this is inside the model's own noise floor and is
 # not listed, however the week's slate looks.
 MIN_SPREAD_EDGE = 3.0
 MIN_TOTAL_EDGE = 4.0
-MIN_PROP_PROBABILITY = 0.56
+MIN_PROP_PROBABILITY = 0.54
 MIN_PROP_EDGE = 0.04          # over the de-vigged book probability
 # Above this the "edge" is a data problem (wrong team match, stale line), not a pick.
 MAX_SPREAD_EDGE = 21.0
@@ -209,7 +220,8 @@ def spread_pick(row, *, season: int, week: int, ranks: dict, team_status: dict) 
     team, opp = (f.home, f.away) if home_side else (f.away, f.home)
     line = -f.book_margin if home_side else f.book_margin   # the picked team's spread
     model_line = -f.model_margin if home_side else f.model_margin
-    prob = _phi(abs(edge) / SPREAD_SIGMA)
+    weight = MARGIN_WEIGHT["validated" if f.in_validated_regime else "early"]
+    prob = _phi(weight * abs(edge) / SPREAD_SIGMA)
     fav = f.home if f.model_margin > 0 else f.away
     sentences = [
         f"The model makes it {fav} by {abs(f.model_margin):.1f}; DraftKings has "
@@ -247,7 +259,8 @@ def total_pick(row, *, season: int, week: int, ranks: dict, team_status: dict) -
     if not MIN_TOTAL_EDGE <= abs(edge) <= MAX_TOTAL_EDGE:
         return None
     over = edge > 0
-    prob = _phi(abs(edge) / TOTAL_SIGMA)
+    weight = TOTAL_WEIGHT["validated" if f.in_validated_regime else "early"]
+    prob = _phi(weight * abs(edge) / TOTAL_SIGMA)
     sentences = [f"The model projects {f.independent_total:.1f} combined points against a "
                  f"DraftKings total of {f.book_total:.1f} ({abs(edge):.1f} "
                  f"{'over' if over else 'under'})."]
@@ -311,10 +324,11 @@ def prop_picks(projections: list[dict], quotes: list, *, season: int, week: int,
         if over_imp and under_imp:   # remove the vig
             total = over_imp + under_imp
             over_imp, under_imp = over_imp / total, under_imp / total
-        for side, prob, implied, price in (("over", p_over, over_imp, quote.over_price),
-                                           ("under", 1.0 - p_over, under_imp, quote.under_price)):
+        for side, raw, implied, price in (("over", p_over, over_imp, quote.over_price),
+                                          ("under", 1.0 - p_over, under_imp, quote.under_price)):
             if implied is None or price is None:
                 continue
+            prob = implied + PROP_WEIGHT * (raw - implied)
             if prob < MIN_PROP_PROBABILITY or prob - implied < MIN_PROP_EDGE:
                 continue
             out.append(_prop_pick(row, quote, side, prob, implied, price, dist,
