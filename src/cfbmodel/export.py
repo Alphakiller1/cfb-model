@@ -38,7 +38,7 @@ from cfbmodel import ratings as ratings_mod
 from cfbmodel import simulate, teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "3.2.0"
+SCHEMA_VERSION = "3.3.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -117,6 +117,7 @@ def payload(
     authority: auth_mod.Authority | None = None,
     generated_at: datetime | None = None,
     player_projections: tuple[list[dict], dict] | None = None,
+    best_bets: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Build the export payload. `rows` is (forecast, kickoff) in any order.
 
@@ -160,6 +161,7 @@ def payload(
         "games": [_game(season, forecast, kickoff,
                         (player_projections or ([], {}))[1].get("teams"))
                   for forecast, kickoff in ordered],
+        "best_bets": best_bets or [],
         "player_projections": (player_projections or ([], {}))[0],
         "player_projections_status": (player_projections or ([], {}))[1],
     }

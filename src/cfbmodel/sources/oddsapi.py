@@ -400,3 +400,160 @@ def fetch_lines(team_meta: dict, *, books: tuple[str, ...] | None = None,
         error=f"{filled} game(s) filled from ESPN's {requested_book} lines",
     )
     return out
+
+
+# ── player props ─────────────────────────────────────────────────────────────
+# Odds API market -> the player-projection stat it prices.
+PROP_MARKETS: dict[str, str] = {
+    "player_pass_yds": "pass_yds",
+    "player_pass_tds": "pass_td",
+    "player_rush_yds": "rush_yds",
+    "player_receptions": "rec",
+    "player_reception_yds": "rec_yds",
+}
+# Props cost `markets x regions` credits *per game*. On the free 500-credit tier
+# the board can afford one pull a week for a handful of games: 8 games x 5
+# markets = 40 credits. Lines are reused for this long before a re-pull.
+PROP_TTL_SECONDS = 30 * 60 * 60
+PROP_GAMES = int(os.getenv("CFB_PROP_GAMES", "8"))
+# Books post college props a day or two out; asking earlier spends credits on
+# empty responses.
+PROP_LEAD_HOURS = 30
+PROP_CREDIT_FLOOR = 100
+
+
+@dataclass(frozen=True)
+class PropQuote:
+    home: str
+    away: str
+    player: str
+    stat: str              # projection stat key, e.g. "rush_yds"
+    line: float
+    over_price: int | None
+    under_price: int | None
+    book: str
+    last_update: str | None
+
+
+_PROP_STATUS: dict = {"state": "not_run"}
+
+
+def prop_status() -> dict:
+    return dict(_PROP_STATUS)
+
+
+def _price(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_props(event: dict, home: str, away: str, requested_book: str) -> list[PropQuote]:
+    book = _pick_book(event.get("bookmakers", []), (requested_book,))
+    if not book:
+        return []
+    out: list[PropQuote] = []
+    for market in book.get("markets", []):
+        stat = PROP_MARKETS.get(market.get("key"))
+        if stat is None:
+            continue
+        sides: dict[tuple[str, float], dict[str, int | None]] = {}
+        for outcome in market.get("outcomes", []):
+            player = (outcome.get("description") or "").strip()
+            point = _number(outcome.get("point"), low=0.0, high=700.0)
+            side = (outcome.get("name") or "").lower()
+            if not player or point is None or side not in {"over", "under"}:
+                continue
+            sides.setdefault((player, point), {})[side] = _price(outcome.get("price"))
+        for (player, point), prices in sides.items():
+            out.append(PropQuote(home, away, player, stat, point, prices.get("over"),
+                                 prices.get("under"), book["key"],
+                                 market.get("last_update") or book.get("last_update")))
+    return out
+
+
+def _cache_is_fresh(path: str, params: dict, ttl: int) -> bool:
+    key = _load_key()
+    if not key:
+        return False
+    url = f"{BASE}{path}?" + urllib.parse.urlencode({**params, "apiKey": key})
+    cached = _cache_path(url)
+    return cached.is_file() and (time.time() - cached.stat().st_mtime) < ttl
+
+
+def _drop_cached(path: str, params: dict) -> None:
+    key = _load_key()
+    if key:
+        url = f"{BASE}{path}?" + urllib.parse.urlencode({**params, "apiKey": key})
+        _cache_path(url).unlink(missing_ok=True)
+
+
+def fetch_player_props(team_meta: dict, games: list[tuple[str, str, datetime | None]],
+                       *, book: str | None = None) -> list[PropQuote]:
+    """Prop lines for up to `PROP_GAMES` of ``games`` (in priority order).
+
+    ``games`` is (home_school, away_school, kickoff_utc). Games kicking off more
+    than `PROP_LEAD_HOURS` out are skipped, a cached pull is reused for
+    `PROP_TTL_SECONDS`, and nothing is spent below `PROP_CREDIT_FLOOR`.
+    """
+    global _PROP_STATUS
+    requested = book or (os.getenv("ODDS_BOOKMAKERS", "") or DEFAULT_BOOK).split(",")[0].strip()
+    now = datetime.now(timezone.utc)
+    soon = [(h, a) for h, a, kickoff in games
+            if kickoff is not None and 0 < (kickoff - now).total_seconds() < PROP_LEAD_HOURS * 3600]
+    soon = soon[:PROP_GAMES]
+    if not soon:
+        _PROP_STATUS = {"state": "not_due", "games": 0, "quotes": 0}
+        return []
+    try:
+        events, _ = _get(f"/sports/{SPORT}/events", {}, ttl=60 * 60)  # free endpoint
+    except OddsAPIError as exc:
+        _PROP_STATUS = {"state": "error", "error": str(exc)}
+        return []
+    index = build_index(team_meta)
+    ids = {}
+    for event in events:
+        home = match_team(event.get("home_team", ""), index)
+        away = match_team(event.get("away_team", ""), index)
+        if home and away:
+            ids[(home, away)] = event["id"]
+    quotes: list[PropQuote] = []
+    spent = cached = skipped = 0
+    left: int | None = None
+    query = {"regions": "us", "markets": ",".join(PROP_MARKETS), "oddsFormat": "american",
+             "bookmakers": requested}
+    for home, away in soon:
+        event_id = ids.get((home, away))
+        if event_id is None:
+            skipped += 1
+            continue
+        path = f"/sports/{SPORT}/events/{event_id}/odds"
+        if _cache_is_fresh(path, query, PROP_TTL_SECONDS):
+            # A cached pull costs nothing; only check the floor before spending.
+            data, headers = _get(path, query, ttl=PROP_TTL_SECONDS, network=False)
+            cached += 1
+        else:
+            if left is None:
+                left = remaining()
+            if left is None or left < PROP_CREDIT_FLOOR:
+                skipped += 1
+                continue
+            try:
+                data, headers = _get(path, query, ttl=PROP_TTL_SECONDS)
+            except OddsAPIError:
+                skipped += 1
+                continue
+            spent += 1
+            if headers.get("remaining") is not None:
+                left = int(headers["remaining"])
+        parsed = parse_props(data, home, away, requested)
+        if not parsed:
+            # Not posted yet. An empty pull costs nothing, so drop it rather than
+            # pin "no props" for 30 hours and miss them when they go up.
+            _drop_cached(path, query)
+        quotes.extend(parsed)
+    _PROP_STATUS = {"state": "fresh" if spent else "cached" if cached else "unavailable",
+                    "games": len(soon), "pulled": spent, "reused": cached,
+                    "skipped": skipped, "quotes": len(quotes), "remaining": left}
+    return quotes

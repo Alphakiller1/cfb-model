@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from cfbmodel.sources.espn_box import GameBox
 
 
-SCHEMA_VERSION = "2.1.0"
+SCHEMA_VERSION = "2.2.0"
 
 # Game snapshots are one row per game per sportsbook quote -- roughly 700 a week
 # across FBS. The old 5,000-row cap began deleting the season's earliest graded
@@ -48,15 +48,18 @@ def _stamp(moment: datetime | None = None) -> str:
 
 def _load(path: Path) -> dict:
     if not path.is_file():
-        return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": []}
+        return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": [],
+                "best_bets": []}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload.get("snapshots"), list):
             payload.setdefault("player_snapshots", [])
+            payload.setdefault("best_bets", [])
             return payload
     except (json.JSONDecodeError, AttributeError):
         pass
-    return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": []}
+    return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": [],
+            "best_bets": []}
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -175,6 +178,61 @@ def _grade_player(snapshot: dict, box: "GameBox") -> None:
         snapshot["anytime_td_brier"] = round((float(snapshot["anytime_td"]) - scored) ** 2, 4)
 
 
+def _units(result: str, price: int | None) -> float:
+    if result == "win":
+        price = price or -110
+        return round(price / 100.0 if price > 0 else 100.0 / -price, 3)
+    return -1.0 if result == "loss" else 0.0
+
+
+def _grade_bet(bet: dict, results: dict, boxes: dict) -> None:
+    """Grade one best bet in place when its game (or box score) is final."""
+    family, line = bet["family"], float(bet["line"])
+    if family in ("spread", "total"):
+        result = results.get((bet["week"], bet["home"], bet["away"]))
+        if result is None:
+            return
+        margin = float(result["homePoints"] - result["awayPoints"])
+        total = float(result["homePoints"] + result["awayPoints"])
+        if family == "spread":
+            value = (margin if bet["side"] == "home" else -margin) + line
+        else:
+            value = (total - line) if bet["side"] == "over" else (line - total)
+        bet["actual"] = margin if family == "spread" else total
+    else:
+        box = boxes.get(bet.get("event_id") or "")
+        if box is None:
+            return
+        player = next((p for p in box.players if p.athlete_id == bet.get("player_id")
+                       and p.team_id == bet.get("team_id")), None)
+        if player is None:
+            # Books void a prop when the player does not play.
+            bet.update({"status": "graded", "graded_at": _stamp(), "result": "void",
+                        "units": 0.0, "actual": None})
+            return
+        actual = float(getattr(player, bet["stat"], 0.0) or 0.0)
+        value = (actual - line) if bet["side"] == "over" else (line - actual)
+        bet["actual"] = actual
+    outcome = "push" if abs(value) < 1e-9 else "win" if value > 0 else "loss"
+    bet.update({"status": "graded", "graded_at": _stamp(), "result": outcome,
+                "units": _units(outcome, bet.get("price"))})
+
+
+def _best_bet_summary(payload: dict, season: int | None) -> dict:
+    out: dict[str, dict] = {}
+    for bet in payload.get("best_bets", []):
+        if season is not None and bet.get("season") != season:
+            continue
+        family = out.setdefault(bet["family"], {"win": 0, "loss": 0, "push": 0, "void": 0,
+                                                "pending": 0, "units": 0.0})
+        if bet.get("status") != "graded":
+            family["pending"] += 1
+            continue
+        family[bet["result"]] += 1
+        family["units"] = round(family["units"] + float(bet.get("units") or 0.0), 3)
+    return out
+
+
 def _player_summary(payload: dict, season: int | None) -> dict:
     rows = [row for row in payload.get("player_snapshots", [])
             if row.get("status") == "graded"
@@ -264,6 +322,7 @@ def summary(payload: dict, *, season: int | None = None) -> dict:
         "book_total_mae": _mean(rows, "book_total_abs_error"),
         "totals": {name: totals.count(name) for name in ("win", "loss", "push")},
         "players": _player_summary(payload, season),
+        "best_bets": _best_bet_summary(payload, season),
     }
 
 
@@ -276,6 +335,7 @@ def update(
     player_projections: list[dict] | None = None,
     player_boxes: list["GameBox"] | None = None,
     availability: dict | None = None,
+    best_bets: list[dict] | None = None,
     path: Path = DEFAULT_PATH,
     recorded_at: datetime | None = None,
 ) -> dict:
@@ -296,6 +356,10 @@ def update(
         box = boxes.get(snapshot.get("event_id") or "")
         if box is not None:
             _grade_player(snapshot, box)
+
+    for bet in payload["best_bets"]:
+        if bet.get("status") == "pending":
+            _grade_bet(bet, results, boxes)
 
     now = recorded_at or _now()
     known = {row.get("snapshot_id") for row in payload["snapshots"]}
@@ -388,6 +452,31 @@ def update(
             payload["player_snapshots"].append(row)
         else:
             payload["player_snapshots"][existing] = row
+
+    # Best bets: the last list published before kickoff is the one graded. A
+    # pick dropped from a later pre-kickoff build is withdrawn, not graded.
+    listed = {bet["pick_id"]: bet for bet in best_bets or []}
+    kept = []
+    for bet in payload["best_bets"]:
+        kickoff = _parse(bet.get("kickoff"))
+        open_ = bet.get("status") == "pending" and kickoff is not None and kickoff > now
+        if open_ and best_bets is not None and bet["pick_id"] not in listed:
+            continue  # withdrawn before kickoff
+        kept.append(bet)
+    payload["best_bets"] = kept
+    index = {bet["pick_id"]: i for i, bet in enumerate(payload["best_bets"])}
+    for pick_id, bet in listed.items():
+        kickoff = _parse(bet.get("kickoff"))
+        if kickoff is None or kickoff <= now:
+            continue
+        row = {**bet, "recorded_at": _stamp(now), "status": "pending",
+               "authority": "shadow_only"}
+        if pick_id in index:
+            if payload["best_bets"][index[pick_id]].get("status") == "pending":
+                payload["best_bets"][index[pick_id]] = row
+        else:
+            index[pick_id] = len(payload["best_bets"])
+            payload["best_bets"].append(row)
 
     payload["schema_version"] = SCHEMA_VERSION
     payload["updated_at"] = _stamp(now)

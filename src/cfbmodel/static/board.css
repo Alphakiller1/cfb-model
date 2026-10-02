@@ -280,3 +280,15 @@ footer p+p{margin-top:8px}
 .cm-rank{width:22px;text-align:right;color:var(--text-4,#4C5161);font-variant-numeric:tabular-nums}
 .cm-team{flex:1;color:var(--text,#F5F6FA)}
 .cm-val{font-variant-numeric:tabular-nums}
+
+/* best bets */
+.bb-family{font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+color:var(--text-2);margin:18px 0 8px}
+.bb-list{display:grid;gap:10px}
+.bb{border:1px solid var(--border-soft);border-radius:12px;padding:12px 16px;background:var(--surface,transparent)}
+.bb-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.bb-pick{font-weight:700;color:var(--text);font-size:15px}
+.bb-price{color:var(--text-3);font-size:12px}
+.bb-meta{color:var(--text-3);font-size:11.5px;margin-top:3px}
+.bb-tag{margin-left:6px;padding:1px 7px;border-radius:999px;border:1px solid var(--border-2);font-size:10.5px}
+.bb-angle{margin-top:8px;font-size:12.5px;color:var(--text-2);line-height:1.5}

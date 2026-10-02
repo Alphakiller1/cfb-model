@@ -173,6 +173,7 @@ are now read live and archived; see `docs/DATA_SOURCES.md`) — are in
 | `roster.py` | Transfer portal, quarterback-specific returning production. |
 | `coaching.py` | First-year staff, and the tendency profile a hire brings. |
 | `venue.py` | Elevation, travel, and body-clock terms for home field. |
+| `best_bets.py` | Weekly best bets — spreads, totals and player props where the model disagrees with DraftKings by more than its noise floor, each with a written angle built from the numbers that produced it. Logged before kickoff and graded in the ledger; the season record is shown beside the picks. |
 | `sources/availability.py` | Official conference availability reports (SEC, ACC, Big Ten, Big 12, Pac-12, MAC): removes Out/Doubtful players from projections, withholds the edge when a starting QB is out. |
 | `fitting.py` | Stdlib OLS and the leave-one-season-out adoption harness. |
 | `export.py` | The board as JSON, for downstream renderers. |

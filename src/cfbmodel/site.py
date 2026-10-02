@@ -27,7 +27,7 @@ from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import export, ledger, matrix, ratings, teams, totals
+from cfbmodel import best_bets, export, ledger, matrix, ratings, teams, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -157,6 +157,7 @@ def _nav(season: int, week: int) -> str:
     return f"""<header class="chase-header"><div class="wrap"><nav class="chase-nav">
 <div class="chase-logo"><span class="chase-wordmark">CHASE<em>ANALYTICS</em></span></div>
 <div class="nav-links">
+<a class="nav-link" href="#best-bets">Best Bets</a>
 <a class="nav-link" href="#board">Board</a>
 <a class="nav-link" href="#ratings">Power Ratings</a>
 <a class="nav-link" href="#conferences">Conferences</a>
@@ -492,6 +493,63 @@ def _breakdown(row: Row, season: int, rating_table: dict[str, float],
     return _bd_shell(row, season, "".join(parts), note)
 
 
+_FAMILY_LABEL = {"spread": "Spreads", "total": "Totals", "prop": "Player props"}
+
+
+def _record_line(record: dict) -> str:
+    bits = []
+    for family in ("spread", "total", "prop"):
+        r = record.get(family)
+        if not r:
+            continue
+        graded = r["win"] + r["loss"] + r["push"]
+        if not graded:
+            bits.append(f"{_FAMILY_LABEL[family]}: no graded picks yet")
+            continue
+        units = r.get("units", 0.0)
+        bits.append(f"{_FAMILY_LABEL[family]} {r['win']}-{r['loss']}-{r['push']} "
+                    f"({units:+.1f}u)")
+    return " · ".join(bits) if bits else "No best bets graded yet this season."
+
+
+def _best_bets_section(picks: list, record: dict, week: int) -> str:
+    """The week's best bets, each with the angle that produced it, and their record."""
+    cards = []
+    for family in ("spread", "total", "prop"):
+        group = [p for p in picks if p.family == family]
+        if not group:
+            continue
+        items = []
+        for pick in group:
+            matchup = f"{pick.away} @ {pick.home}"
+            price = f"{pick.price:+d}" if pick.price else ""
+            edge = (f"{pick.edge:.1f} pts" if family != "prop" else f"+{pick.edge:.0%} vs book")
+            tags = "".join(f'<span class="bb-tag">{esc(t)}</span>' for t in pick.tags)
+            items.append(f"""<article class="bb">
+<div class="bb-head"><span class="bb-pick">{esc(pick.selection)}</span>
+<span class="bb-price">{esc(price)}</span></div>
+<div class="bb-meta">{esc(matchup)} · model {pick.model_number:g} vs book {pick.book_number:g}
+ · edge {esc(edge)} · est. {pick.probability:.0%} to hit{tags}</div>
+<p class="bb-angle"><b>The angle:</b> {esc(pick.angle)}</p>
+</article>""")
+        cards.append(f'<h3 class="bb-family">{_FAMILY_LABEL[family]}</h3>'
+                     f'<div class="bb-list">{"".join(items)}</div>')
+    body = "".join(cards) or (
+        '<p class="dim">No game clears the minimum disagreement this week, and no prop lines '
+        'are posted yet for the priced games (props are pulled about a day before kickoff).</p>')
+    return f"""<section id="best-bets">
+<div class="sec-eyebrow">00 · Picks</div>
+<h2 class="sec-title">Week {esc(week)} Best Bets</h2>
+<p class="sec-blurb">The board&rsquo;s strongest disagreements with DraftKings, each with the
+angle behind it. Hit estimates give the model only the weight it earned against
+the market in held-out seasons, so they sit close to 50%. Every pick is logged
+before kickoff and graded.
+<b>Season record:</b> {esc(_record_line(record))}. Research picks, not advice: authority
+is RESEARCH_ONLY until the record earns otherwise.</p>
+{body}
+</section>"""
+
+
 # Severe-first, so the card names the players who matter before the probables.
 _AVAIL_LABEL = {
     "out": "Out", "out_first_half": "Out 1H", "doubtful": "Doubtful",
@@ -812,7 +870,8 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
            conference_of: dict[str, str] | None = None,
            health: dict | None = None,
            record: dict | None = None,
-           generated_at: datetime | None = None) -> str:
+           generated_at: datetime | None = None,
+           picks: list | None = None) -> str:
     conference_table = _conference_table(conference_rows or [], rating_table,
                                          conference_of or {})
     generated = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
@@ -867,6 +926,8 @@ strength, early-season reliability weighting, and a timestamped shadow record.</
 {_authority_block(authority)}
 {_tiles()}
 </section>
+
+{_best_bets_section(picks or [], (record or {}).get("best_bets") or {}, week)}
 
 <section id="board">
 <div class="sec-eyebrow">01 · Slate</div>
@@ -1028,6 +1089,32 @@ def build(*, season: int, week: int, out: Path) -> Path:
         player_boxes = espn_box.season_boxes(season, through_week=week)
     except Exception:
         player_boxes = []
+    # Best bets. Props are priced only for the highest-total games with a book
+    # line, because each game's props cost Odds API credits.
+    prop_games = sorted(
+        (row for row in rows if row.forecast.book_total is not None),
+        key=lambda row: -(row.forecast.book_total or 0.0),
+    )
+    try:
+        prop_quotes = oddsapi.fetch_player_props(
+            teams.load(season),
+            [(row.forecast.home, row.forecast.away, row.kickoff_utc) for row in prop_games],
+        )
+    except Exception as exc:
+        prop_quotes = []
+        issues_props = f"{type(exc).__name__}: {exc}"
+    else:
+        issues_props = None
+    try:
+        picks = best_bets.build(
+            rows, season=season, week=week, forms=forms, team_status=team_status,
+            projections=player_payload[0], quotes=prop_quotes,
+            fbs_schools=set(teams.load(season)),
+        )
+    except Exception as exc:
+        picks = []
+        issues_props = f"best bets failed: {type(exc).__name__}: {exc}"
+
     record_summary: dict = {}
     ledger_payload: dict | None = None
     ledger_error = None
@@ -1039,6 +1126,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             player_projections=player_payload[0],
             player_boxes=player_boxes,
             availability=team_status,
+            best_bets=[pick.to_json() for pick in picks],
             recorded_at=generated_at,
         )
         record_summary = ledger_payload.get("summary", {})
@@ -1071,6 +1159,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
     if ledger_error:
         issues.append(f"Shadow ledger unavailable: {ledger_error}")
+    if issues_props:
+        issues.append(f"Best bets / props: {issues_props}")
     failed_reports = [st["source"] for st in availability_status if st.get("state") == "error"]
     if failed_reports:
         issues.append(f"Availability report source(s) unavailable: {', '.join(failed_reports)}")
@@ -1110,6 +1200,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "max_live_age_seconds": max(live_ages) if live_ages else None,
         "cfbd": endpoint_status,
         "odds": odds_status,
+        "props": oddsapi.prop_status(),
+        "best_bets": len(picks),
         "availability": {
             "sources": availability_status,
             "team_reports": len(team_reports),
@@ -1128,7 +1220,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     html_text = render(season=season, week=week, rows=rows,
                        rating_table=rating_table, authority=authority, comps=comps,
                        conference_rows=conference_rows, conference_of=conference_of,
-                       health=health, record=record_summary, generated_at=generated_at)
+                       health=health, record=record_summary, generated_at=generated_at,
+                       picks=picks)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
 
@@ -1137,7 +1230,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     export.write(
         export.payload(season=season, week=week, rows=board_rows,
                        authority=authority, generated_at=generated_at,
-                       player_projections=player_payload),
+                       player_projections=player_payload,
+                       best_bets=[pick.to_json() for pick in picks]),
         out.parent / "board.json",
     )
     export.write(
