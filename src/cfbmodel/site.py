@@ -516,6 +516,29 @@ def _record_line(record: dict) -> str:
     return " · ".join(bits) if bits else "No best bets graded yet this season."
 
 
+GATE_MIN_PICKS = 200
+BREAKEVEN = 0.5238
+
+
+def _gate_line(record: dict) -> str:
+    """Progress toward the evidence bar for calling these picks an edge: enough
+    graded spread/total picks, and a win-rate interval wholly above breakeven."""
+    wins = sum((record.get(f) or {}).get("win", 0) for f in ("spread", "total"))
+    losses = sum((record.get(f) or {}).get("loss", 0) for f in ("spread", "total"))
+    n = wins + losses
+    if not n:
+        return (f"Evidence bar: {GATE_MIN_PICKS} graded spread/total picks with a 95% win-rate "
+                f"interval above {BREAKEVEN:.1%}. None graded yet.")
+    rate = wins / n
+    z = 1.96
+    lower = ((rate + z * z / (2 * n) - z * ((rate * (1 - rate) + z * z / (4 * n)) / n) ** 0.5)
+             / (1 + z * z / n))
+    met = n >= GATE_MIN_PICKS and lower > BREAKEVEN
+    return (f"Evidence bar: {n} of {GATE_MIN_PICKS} graded picks, win rate {rate:.1%} "
+            f"(95% lower bound {lower:.1%} vs {BREAKEVEN:.1%} breakeven) - "
+            + ("met." if met else "not met; these stay research picks."))
+
+
 def _best_bets_section(picks: list, record: dict, week: int) -> str:
     """The week's best bets, each with the angle that produced it, and their record."""
     cards = []
@@ -549,7 +572,7 @@ angle behind it. Each pick is graded at the line it was first published at.
 Hit estimates give the model only the weight it earned against
 the market in held-out seasons, so they sit close to 50%. Every pick is logged
 before kickoff and graded.
-<b>Season record:</b> {esc(_record_line(record))}. Research picks, not advice: authority
+<b>Season record:</b> {esc(_record_line(record))}. {esc(_gate_line(record))} Research picks, not advice: authority
 is RESEARCH_ONLY until the record earns otherwise.</p>
 {body}
 </section>"""
