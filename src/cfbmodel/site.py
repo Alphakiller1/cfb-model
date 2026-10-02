@@ -27,7 +27,7 @@ from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import best_bets, export, ledger, matrix, ratings, teams, tiers, totals
+from cfbmodel import best_bets, export, ledger, matrix, ratings, sharp, teams, tiers, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -158,6 +158,7 @@ def _nav(season: int, week: int) -> str:
 <div class="chase-logo"><span class="chase-wordmark">CHASE<em>ANALYTICS</em></span></div>
 <div class="nav-links">
 <a class="nav-link" href="#best-bets">Best Bets</a>
+<a class="nav-link" href="#sharp">Sharp Money</a>
 <a class="nav-link" href="#board">Board</a>
 <a class="nav-link" href="#ratings">Power Ratings</a>
 <a class="nav-link" href="#conferences">Conferences</a>
@@ -552,6 +553,46 @@ is RESEARCH_ONLY until the record earns otherwise.</p>
 </section>"""
 
 
+def _sharp_section(spots: list, record: dict, week: int) -> str:
+    """Where the money is concentrated against the tickets, and how the line moved."""
+    bits = []
+    for family, label in (("spread", "Spreads"), ("total", "Totals")):
+        r = record.get(family)
+        if r and (r["win"] + r["loss"] + r["push"]):
+            clv = (f", mean CLV {r['mean_clv']:+.2f}" if r.get("mean_clv") is not None else "")
+            bits.append(f"{label} {r['win']}-{r['loss']}-{r['push']} ({r['units']:+.1f}u{clv})")
+    line = " · ".join(bits) if bits else "no sharp spots graded yet this season"
+    rows = []
+    for spot in spots:
+        move = (f"{spot.open_line:+g} &rarr; {spot.line:+g}" if spot.family == "spread"
+                and spot.open_line is not None else
+                f"{spot.open_line:g} &rarr; {spot.line:g}" if spot.open_line is not None
+                else "&ndash;")
+        tags = []
+        if spot.reverse:
+            tags.append('<span class="bb-tag">reverse line move</span>')
+        if spot.model_agrees is not None:
+            verdict = "agrees" if spot.model_agrees else "disagrees"
+            tags.append(f'<span class="bb-tag">model {verdict}</span>')
+        rows.append(f"""<article class="bb"><div class="bb-head">
+<span class="bb-pick">{esc(spot.selection)}</span>
+<span class="bb-price">concentration {spot.concentration:.0f}</span></div>
+<div class="bb-meta">{esc(spot.away)} @ {esc(spot.home)} · {spot.handle_pct:.0f}% of money /
+ {spot.bets_pct:.0f}% of bets · line {move}{"".join(tags)}</div>
+<p class="bb-angle">{esc(spot.note)}</p></article>""")
+    body = "".join(rows) or ('<p class="dim">No game has money running 10+ points ahead of '
+                             'its ticket share yet.</p>')
+    return f"""<section id="sharp">
+<div class="sec-eyebrow">00b · Market</div>
+<h2 class="sec-title">Week {esc(week)} Sharp Money &amp; Line Moves</h2>
+<p class="sec-blurb">DraftKings&rsquo; public splits: where the share of money runs well ahead
+of the share of bets (fewer, larger wagers), ranked with how far the line has moved toward
+that side since it was first logged. <b>Season record of these spots:</b> {esc(line)}.
+Market observations, not model picks.</p>
+<div class="bb-list">{body}</div>
+</section>"""
+
+
 # Severe-first, so the card names the players who matter before the probables.
 _AVAIL_LABEL = {
     "out": "Out", "out_first_half": "Out 1H", "doubtful": "Doubtful",
@@ -873,7 +914,7 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
            health: dict | None = None,
            record: dict | None = None,
            generated_at: datetime | None = None,
-           picks: list | None = None) -> str:
+           picks: list | None = None, spots: list | None = None) -> str:
     conference_table = _conference_table(conference_rows or [], rating_table,
                                          conference_of or {})
     generated = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
@@ -931,6 +972,8 @@ strength, early-season reliability weighting, and a timestamped shadow record.</
 
 {_best_bets_section(picks or [], (record or {}).get("best_bets") or {}, week)}
 
+{_sharp_section(spots or [], (record or {}).get("sharp_spots") or {}, week)}
+
 <section id="board">
 <div class="sec-eyebrow">01 · Slate</div>
 <h2 class="sec-title">Week {esc(week)} Board</h2>
@@ -983,7 +1026,7 @@ market and its authority is RESEARCH_ONLY; nothing here is a recommendation to w
 def build(*, season: int, week: int, out: Path) -> Path:
     """Fetch, forecast, and write the dashboard."""
     from cfbmodel import cli  # local import: cli owns the data assembly
-    from cfbmodel.sources import availability, cfbd, espn_box, oddsapi
+    from cfbmodel.sources import availability, cfbd, dk_splits, espn_box, oddsapi
 
     generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     cfbd.clear_run_state()
@@ -1119,6 +1162,19 @@ def build(*, season: int, week: int, out: Path) -> Path:
         picks = []
         issues_props = f"best bets failed: {type(exc).__name__}: {exc}"
 
+    # Sharp money: DraftKings handle vs bets, against the line history the
+    # ledger has already logged for each game this week.
+    try:
+        splits = dk_splits.fetch("cfb")
+        index = oddsapi.build_index(teams.load(season))
+        history = ledger._load(ledger.DEFAULT_PATH).get("snapshots", [])
+        spots = sharp.build(rows, splits, history, season=season, week=week,
+                            resolve=lambda name: oddsapi.match_team(name, index))
+    except Exception as exc:
+        spots = []
+        failure = f"sharp money failed: {type(exc).__name__}: {exc}"
+        issues_props = f"{issues_props}; {failure}" if issues_props else failure
+
     record_summary: dict = {}
     ledger_payload: dict | None = None
     ledger_error = None
@@ -1131,6 +1187,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             player_boxes=player_boxes,
             availability=team_status,
             best_bets=[pick.to_json() for pick in picks],
+            sharp_spots=[spot.to_json() for spot in spots],
             recorded_at=generated_at,
         )
         record_summary = ledger_payload.get("summary", {})
@@ -1205,6 +1262,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "cfbd": endpoint_status,
         "odds": odds_status,
         "props": oddsapi.prop_status(),
+        "splits": dk_splits.status(),
+        "sharp_spots": len(spots),
         "best_bets": len(picks),
         "availability": {
             "sources": availability_status,
@@ -1225,7 +1284,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
                        rating_table=rating_table, authority=authority, comps=comps,
                        conference_rows=conference_rows, conference_of=conference_of,
                        health=health, record=record_summary, generated_at=generated_at,
-                       picks=picks)
+                       picks=picks, spots=spots)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
 
@@ -1235,7 +1294,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         export.payload(season=season, week=week, rows=board_rows,
                        authority=authority, generated_at=generated_at,
                        player_projections=player_payload,
-                       best_bets=[pick.to_json() for pick in picks]),
+                       best_bets=[pick.to_json() for pick in picks],
+                       sharp_spots=[spot.to_json() for spot in spots]),
         out.parent / "board.json",
     )
     export.write(

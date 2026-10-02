@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from cfbmodel.sources.espn_box import GameBox
 
 
-SCHEMA_VERSION = "2.2.0"
+SCHEMA_VERSION = "2.3.0"
 
 # Game snapshots are one row per game per sportsbook quote -- roughly 700 a week
 # across FBS. The old 5,000-row cap began deleting the season's earliest graded
@@ -49,17 +49,18 @@ def _stamp(moment: datetime | None = None) -> str:
 def _load(path: Path) -> dict:
     if not path.is_file():
         return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": [],
-                "best_bets": []}
+                "best_bets": [], "sharp_spots": []}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload.get("snapshots"), list):
             payload.setdefault("player_snapshots", [])
             payload.setdefault("best_bets", [])
+            payload.setdefault("sharp_spots", [])
             return payload
     except (json.JSONDecodeError, AttributeError):
         pass
     return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": [],
-            "best_bets": []}
+            "best_bets": [], "sharp_spots": []}
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -218,6 +219,81 @@ def _grade_bet(bet: dict, results: dict, boxes: dict) -> None:
                 "units": _units(outcome, bet.get("price"))})
 
 
+def _record_list(payload: dict, key: str, items: list[dict] | None, now: datetime) -> None:
+    if items is None:
+        return
+    listed = {item["pick_id"]: item for item in items}
+    kept = []
+    for item in payload[key]:
+        kickoff = _parse(item.get("kickoff"))
+        still_open = item.get("status") == "pending" and kickoff is not None and kickoff > now
+        if still_open and item["pick_id"] not in listed:
+            continue  # withdrawn before kickoff
+        kept.append(item)
+    payload[key] = kept
+    index = {item["pick_id"]: i for i, item in enumerate(kept)}
+    for pick_id, item in listed.items():
+        kickoff = _parse(item.get("kickoff"))
+        if kickoff is None or kickoff <= now:
+            continue
+        row = {**item, "recorded_at": _stamp(now), "status": "pending",
+               "authority": "shadow_only"}
+        if pick_id not in index:
+            index[pick_id] = len(payload[key])
+            payload[key].append(row)
+        elif payload[key][index[pick_id]].get("status") == "pending":
+            payload[key][index[pick_id]] = row
+
+
+def _closing_lines(snapshots: list[dict]) -> dict[tuple, dict]:
+    """(season, week, home, away) -> the last quote logged before kickoff."""
+    out: dict[tuple, dict] = {}
+    for row in snapshots:
+        key = (row.get("season"), row.get("week"), row.get("home"), row.get("away"))
+        if key not in out or row.get("recorded_at", "") > out[key].get("recorded_at", ""):
+            out[key] = row
+    return out
+
+
+def _clv(spot: dict, close: dict | None) -> float | None:
+    """Points of closing-line value: how much better the logged number was than
+    the last pre-kickoff number, from the spot's side."""
+    if not close:
+        return None
+    line = float(spot["line"])
+    if spot["family"] == "spread":
+        if close.get("book_margin") is None:
+            return None
+        closing = -close["book_margin"] if spot["side"] == "home" else close["book_margin"]
+        return round(line - closing, 2)
+    if close.get("book_total") is None:
+        return None
+    closing = float(close["book_total"])
+    return round((closing - line) if spot["side"] == "over" else (line - closing), 2)
+
+
+def _sharp_summary(payload: dict, season: int | None) -> dict:
+    out: dict[str, dict] = {}
+    for spot in payload.get("sharp_spots", []):
+        if season is not None and spot.get("season") != season:
+            continue
+        family = out.setdefault(spot["family"], {"win": 0, "loss": 0, "push": 0, "void": 0,
+                                                 "pending": 0, "units": 0.0, "clv": []})
+        if spot.get("status") != "graded":
+            family["pending"] += 1
+            continue
+        family[spot["result"]] += 1
+        family["units"] = round(family["units"] + float(spot.get("units") or 0.0), 3)
+        if spot.get("clv") is not None:
+            family["clv"].append(float(spot["clv"]))
+    for family in out.values():
+        values = family.pop("clv")
+        family["mean_clv"] = round(statistics.fmean(values), 2) if values else None
+        family["clv_positive_rate"] = (round(sum(v > 0 for v in values) / len(values), 3)
+                                       if values else None)
+    return out
+
+
 def _best_bet_summary(payload: dict, season: int | None) -> dict:
     out: dict[str, dict] = {}
     for bet in payload.get("best_bets", []):
@@ -323,6 +399,7 @@ def summary(payload: dict, *, season: int | None = None) -> dict:
         "totals": {name: totals.count(name) for name in ("win", "loss", "push")},
         "players": _player_summary(payload, season),
         "best_bets": _best_bet_summary(payload, season),
+        "sharp_spots": _sharp_summary(payload, season),
     }
 
 
@@ -336,6 +413,7 @@ def update(
     player_boxes: list["GameBox"] | None = None,
     availability: dict | None = None,
     best_bets: list[dict] | None = None,
+    sharp_spots: list[dict] | None = None,
     path: Path = DEFAULT_PATH,
     recorded_at: datetime | None = None,
 ) -> dict:
@@ -360,6 +438,13 @@ def update(
     for bet in payload["best_bets"]:
         if bet.get("status") == "pending":
             _grade_bet(bet, results, boxes)
+    closing = _closing_lines(payload["snapshots"])
+    for spot in payload["sharp_spots"]:
+        if spot.get("status") == "pending":
+            _grade_bet(spot, results, boxes)
+            if spot.get("status") == "graded":
+                spot["clv"] = _clv(spot, closing.get(
+                    (spot["season"], spot["week"], spot["home"], spot["away"])))
 
     now = recorded_at or _now()
     known = {row.get("snapshot_id") for row in payload["snapshots"]}
@@ -453,30 +538,10 @@ def update(
         else:
             payload["player_snapshots"][existing] = row
 
-    # Best bets: the last list published before kickoff is the one graded. A
-    # pick dropped from a later pre-kickoff build is withdrawn, not graded.
-    listed = {bet["pick_id"]: bet for bet in best_bets or []}
-    kept = []
-    for bet in payload["best_bets"]:
-        kickoff = _parse(bet.get("kickoff"))
-        open_ = bet.get("status") == "pending" and kickoff is not None and kickoff > now
-        if open_ and best_bets is not None and bet["pick_id"] not in listed:
-            continue  # withdrawn before kickoff
-        kept.append(bet)
-    payload["best_bets"] = kept
-    index = {bet["pick_id"]: i for i, bet in enumerate(payload["best_bets"])}
-    for pick_id, bet in listed.items():
-        kickoff = _parse(bet.get("kickoff"))
-        if kickoff is None or kickoff <= now:
-            continue
-        row = {**bet, "recorded_at": _stamp(now), "status": "pending",
-               "authority": "shadow_only"}
-        if pick_id in index:
-            if payload["best_bets"][index[pick_id]].get("status") == "pending":
-                payload["best_bets"][index[pick_id]] = row
-        else:
-            index[pick_id] = len(payload["best_bets"])
-            payload["best_bets"].append(row)
+    # Best bets and sharp spots: the last list published before kickoff is the
+    # one graded. A pick dropped from a later pre-kickoff build is withdrawn.
+    _record_list(payload, "best_bets", best_bets, now)
+    _record_list(payload, "sharp_spots", sharp_spots, now)
 
     payload["schema_version"] = SCHEMA_VERSION
     payload["updated_at"] = _stamp(now)

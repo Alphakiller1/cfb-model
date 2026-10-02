@@ -119,6 +119,7 @@ def payload(
     generated_at: datetime | None = None,
     player_projections: tuple[list[dict], dict] | None = None,
     best_bets: list[dict] | None = None,
+    sharp_spots: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Build the export payload. `rows` is (forecast, kickoff) in any order.
 
@@ -163,6 +164,7 @@ def payload(
                         (player_projections or ([], {}))[1].get("teams"))
                   for forecast, kickoff in ordered],
         "best_bets": best_bets or [],
+        "sharp_spots": sharp_spots or [],
         "player_projections": (player_projections or ([], {}))[0],
         "player_projections_status": (player_projections or ([], {}))[1],
     }
