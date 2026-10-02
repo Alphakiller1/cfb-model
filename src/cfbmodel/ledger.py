@@ -220,29 +220,24 @@ def _grade_bet(bet: dict, results: dict, boxes: dict) -> None:
 
 
 def _record_list(payload: dict, key: str, items: list[dict] | None, now: datetime) -> None:
+    """Log each pick the first time it is published, and lock it there.
+
+    A reader acts on a pick when it appears, at the number it shows then. So the
+    first published version - its side, line and price - is the one graded: a
+    later build neither rewrites it at a moved line nor withdraws it when it
+    drops off the list. Closing-line value then measures what that timing was
+    worth.
+    """
     if items is None:
         return
-    listed = {item["pick_id"]: item for item in items}
-    kept = []
-    for item in payload[key]:
+    known = {item["pick_id"] for item in payload[key]}
+    for item in items:
         kickoff = _parse(item.get("kickoff"))
-        still_open = item.get("status") == "pending" and kickoff is not None and kickoff > now
-        if still_open and item["pick_id"] not in listed:
-            continue  # withdrawn before kickoff
-        kept.append(item)
-    payload[key] = kept
-    index = {item["pick_id"]: i for i, item in enumerate(kept)}
-    for pick_id, item in listed.items():
-        kickoff = _parse(item.get("kickoff"))
-        if kickoff is None or kickoff <= now:
+        if kickoff is None or kickoff <= now or item["pick_id"] in known:
             continue
-        row = {**item, "recorded_at": _stamp(now), "status": "pending",
-               "authority": "shadow_only"}
-        if pick_id not in index:
-            index[pick_id] = len(payload[key])
-            payload[key].append(row)
-        elif payload[key][index[pick_id]].get("status") == "pending":
-            payload[key][index[pick_id]] = row
+        payload[key].append({**item, "recorded_at": _stamp(now), "status": "pending",
+                             "authority": "shadow_only"})
+        known.add(item["pick_id"])
 
 
 def _closing_lines(snapshots: list[dict]) -> dict[tuple, dict]:
@@ -306,6 +301,11 @@ def _best_bet_summary(payload: dict, season: int | None) -> dict:
             continue
         family[bet["result"]] += 1
         family["units"] = round(family["units"] + float(bet.get("units") or 0.0), 3)
+        if bet.get("clv") is not None:
+            family.setdefault("clv", []).append(float(bet["clv"]))
+    for family in out.values():
+        values = family.pop("clv", [])
+        family["mean_clv"] = round(statistics.fmean(values), 2) if values else None
     return out
 
 
@@ -435,10 +435,13 @@ def update(
         if box is not None:
             _grade_player(snapshot, box)
 
+    closing = _closing_lines(payload["snapshots"])
     for bet in payload["best_bets"]:
         if bet.get("status") == "pending":
             _grade_bet(bet, results, boxes)
-    closing = _closing_lines(payload["snapshots"])
+            if bet.get("status") == "graded" and bet["family"] in ("spread", "total"):
+                bet["clv"] = _clv(bet, closing.get(
+                    (bet["season"], bet["week"], bet["home"], bet["away"])))
     for spot in payload["sharp_spots"]:
         if spot.get("status") == "pending":
             _grade_bet(spot, results, boxes)
