@@ -48,6 +48,8 @@ def _breakdown_mismatches(html: str, tolerance: float = 0.03) -> int:
         margin = _grab(block, "Model margin")
         if margin is None:
             continue
+        # The P4-vs-G5 term is added after everything below; reconcile without it.
+        margin -= _grab(block, "P4 vs G5 adjustment") or 0.0
         calibrated = _grab(block, "Outcome-scale calibration")
         if calibrated is not None:
             if abs(calibrated - margin) > tolerance:

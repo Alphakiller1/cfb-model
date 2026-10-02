@@ -27,7 +27,7 @@ from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import best_bets, export, ledger, matrix, ratings, teams, totals
+from cfbmodel import best_bets, export, ledger, matrix, ratings, teams, tiers, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -315,6 +315,8 @@ def _projection_rows(row: Row, season: int) -> str:
     """Closing section shared by both regimes: margin, total, and the scoreline."""
     f = row.forecast
     out = [_bd_section("Projection")]
+    if f.tier_adjustment:
+        out.append(_bd_row("P4 vs G5 adjustment", None, None, f.tier_adjustment))
     if f.model_margin is not None:
         out.append(_bd_row("Model margin", None, None, f.model_margin, kind="bd-row--total"))
     if (f.raw_model_margin is not None and f.model_margin is not None
@@ -1039,6 +1041,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
                 neutral=bool(g.get("neutralSite")),
                 venue_id=cli._venue_id(g),
             ),
+            tier_orientation=tiers.orientation(
+                home, g.get("homeConference"), away, g.get("awayConference"), season),
         )
         moment = _parse_kickoff(g.get("startDate"))
         rows.append(Row(forecast, _kickoff_label(moment), forms.get(home),
