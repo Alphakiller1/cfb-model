@@ -28,7 +28,7 @@ anchor.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cfbmodel import calibration, matrix, ratings, simulate, totals
 from cfbmodel.authority import Action, Authority, current
@@ -356,4 +356,37 @@ def game(
         simulated_margin=sim_margin,
         simulated_win_probability=sim_win,
         home_field_points=0.0 if neutral else home_field,
+    )
+
+
+# Designations that take a starting quarterback off the field for the model's
+# purposes. Questionable stays in: it is close to a coin flip in college and the
+# price already carries it.
+QB_UNAVAILABLE = frozenset({"out", "doubtful", "out_first_half"})
+
+
+def withhold_for_availability(forecast: Forecast, team_status: dict) -> Forecast:
+    """Withhold the edge when either usual starting QB is listed unavailable.
+
+    The ratings describe the team with its usual quarterback. Without him the
+    model is rating a team that is not taking the field, and unlike the NFL board
+    there is no fitted college QB adjustment yet (no report archive before 2024),
+    so the honest move is to stop calling the gap an edge - not to guess a size.
+    The margin is untouched; only `edge_points` and the action change.
+    """
+    reasons = []
+    for side, school in (("home", forecast.home), ("away", forecast.away)):
+        info = (team_status or {}).get(school) or {}
+        status = info.get("starting_qb_status")
+        if status in QB_UNAVAILABLE:
+            reasons.append(f"{school} starting QB {info.get('starting_qb')} listed "
+                           f"{status.replace('_', ' ')} on the availability report")
+    if not reasons or forecast.edge_points is None:
+        return forecast
+    has_price = forecast.book_margin is not None or forecast.market_margin is not None
+    return replace(
+        forecast,
+        edge_points=None,
+        edge_withheld_reason="; ".join(reasons),
+        action=forecast.authority.action_for(None, has_price),
     )

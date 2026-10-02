@@ -148,6 +148,9 @@ class PlayerProjection:
     games: int                         # games in the share estimate (this season)
     metrics: dict[str, float] = field(default_factory=dict)
     anytime_td: float | None = None
+    # The player's designation on this week's conference availability report
+    # (questionable, probable, ...). None when unlisted or no report exists.
+    availability: str | None = None
 
 
 def team_totals(box: GameBox, team_id: str) -> dict[str, float]:
@@ -313,19 +316,55 @@ def _player_shares(hist: History, team_id: str, season: int, week: int
     return shares, info, eligible
 
 
+def _passer(shares: dict, eligible: set[str]) -> str | None:
+    """Whoever threw most, recency-weighted, among players still in the role."""
+    qbs = sorted((aid for aid in eligible if shares[aid]["pass_att"] > 0),
+                 key=lambda aid: (-shares[aid]["pass_att"], aid))
+    return qbs[0] if qbs else None
+
+
+# Usage a ruled-out player carried flows to the teammates still available, but a
+# team that loses most of its backfield does not get one back three times over.
+MAX_USAGE_SCALE = 1.5
+_REDISTRIBUTED = ("rush_car", "rush_yds", "rush_td", "rec", "rec_yds", "rec_td")
+
+
+def usual_starter(hist: History, team_id: str, season: int, week: int
+                  ) -> tuple[str, str] | None:
+    """(athlete_id, name) of the quarterback the box scores say has been starting."""
+    shares, info, eligible = _player_shares(hist, team_id, season, week)
+    aid = _passer(shares, eligible)
+    return (aid, info[aid]["name"]) if aid else None
+
+
 def project_team(hist: History, team_id: str, opponent_id: str, season: int, week: int,
-                 env: Environment, positions: dict[str, str] | None = None
-                 ) -> list[PlayerProjection]:
+                 env: Environment, positions: dict[str, str] | None = None,
+                 report=None) -> list[PlayerProjection]:
+    """``report`` is the team's `availability.TeamReport` for this game, if filed."""
+    from .sources.availability import UNAVAILABLE
+
     shares, info, eligible = _player_shares(hist, team_id, season, week)
     if not eligible:
         return []
+    status_of = ({aid: report.status_of(info[aid]["name"]) for aid in eligible}
+                 if report is not None else {})
+    ruled_out = {aid for aid, status in status_of.items() if status in UNAVAILABLE}
+    if ruled_out:
+        eligible = eligible - ruled_out
+        shares = {aid: dict(values) for aid, values in shares.items()}
+        for stat in _REDISTRIBUTED:
+            lost = sum(shares[aid][stat] for aid in ruled_out)
+            kept = sum(shares[aid][stat] for aid in eligible)
+            if lost > 0 and kept > 0:
+                scale = min(MAX_USAGE_SCALE, (kept + lost) / kept)
+                for aid in eligible:
+                    shares[aid][stat] *= scale
     team = team_environment(hist, team_id, opponent_id, season, week, env)
     team_tds = team["pass_td"] + team["rush_td"]
     out: list[PlayerProjection] = []
-    # The passer: whoever threw most in the last game carries the QB role.
-    qbs = sorted((aid for aid in eligible if shares[aid]["pass_att"] > 0),
-                 key=lambda aid: -shares[aid]["pass_att"])
-    starter = qbs[0] if qbs else None
+    # The passer: whoever threw most among those not ruled out carries the QB
+    # role - so a listed-out starter hands the role to his backup.
+    starter = _passer(shares, eligible)
 
     for aid in eligible:
         share = shares.get(aid)
@@ -382,6 +421,7 @@ def project_team(hist: History, team_id: str, opponent_id: str, season: int, wee
             name=info[aid]["name"], position=position, games=info[aid]["games"],
             metrics={k: m[k] for k in MARKETS[position] if k in m},
             anytime_td=1.0 - math.exp(-lam) if lam > 0 else 0.0,
+            availability=status_of.get(aid),
         ))
     return out
 
@@ -488,7 +528,8 @@ def _environment_for(forecast, home: bool) -> tuple[Environment | None, str]:
                        total=float(total)), source
 
 
-def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[dict], dict]:
+def build_slate(season: int, week: int, forecasts: list[tuple],
+                reports: dict | None = None) -> tuple[list[dict], dict]:
     """Projections for every player on this week's board.
 
     ``forecasts`` is the board's (Forecast, kickoff) rows. Returns (projections,
@@ -498,8 +539,11 @@ def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[di
     from .sources import espn_box
     from .sources.oddsapi import normalise
 
+    from .sources import availability
+
     status = {"model_version": MODEL_VERSION, "authority": "RESEARCH_ONLY",
-              "source": "ESPN box scores", "games": 0, "players": 0, "issues": []}
+              "source": "ESPN box scores", "games": 0, "players": 0, "issues": [],
+              "teams": {}}
     try:
         events = espn_box.week_events(season, week)
     except Exception as exc:
@@ -526,12 +570,22 @@ def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[di
         for school, opponent, team_id, opp_id, home in (
                 (forecast.home, forecast.away, ids[0], ids[1], True),
                 (forecast.away, forecast.home, ids[1], ids[0], False)):
+            kickoff_date = kickoff.isoformat()[:10] if kickoff else None
+            report = availability.report_for(reports or {}, school, kickoff_date)
+            usual = usual_starter(hist, team_id, season, week)
+            qb_status = report.status_of(usual[1]) if (report and usual) else None
+            status["teams"][school] = {
+                "starting_qb": usual[1] if usual else None,
+                "starting_qb_status": qb_status,
+                "report": report.to_json() if report else None,
+            }
             env, env_source = _environment_for(forecast, home)
             if env is None:
                 continue
             positions = {aid: PUBLISHED_POSITIONS.get(pos, pos)
                          for aid, pos in espn_box.roster_positions(team_id).items()}
-            for proj in project_team(hist, team_id, opp_id, season, week, env, positions):
+            for proj in project_team(hist, team_id, opp_id, season, week, env, positions,
+                                     report=report):
                 out.append({
                     "game_key": f"{forecast.away} @ {forecast.home}",
                     "event_id": ids[2],
@@ -548,6 +602,7 @@ def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[di
                     "environment": env_source,
                     "stats": {k: distribution(k, v) for k, v in proj.metrics.items()},
                     "anytime_td": round(proj.anytime_td, 3) if proj.anytime_td is not None else None,
+                    "availability": proj.availability,
                     "model_version": MODEL_VERSION,
                 })
     status["players"] = len(out)
