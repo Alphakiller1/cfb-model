@@ -17,9 +17,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cfbmodel.forecast import Forecast
+    from cfbmodel.sources.espn_box import GameBox
 
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.1.0"
+
+# Game snapshots are one row per game per sportsbook quote -- roughly 700 a week
+# across FBS. The old 5,000-row cap began deleting the season's earliest graded
+# games around week 8; this keeps three full seasons of vintages.
+MAX_SNAPSHOTS = 60_000
+# Player rows keep only the latest pre-kickoff projection per player-game, so
+# the volume is bounded by the slate, not by how often the board rebuilds.
+PLAYER_SEASONS_KEPT = 2
 DEFAULT_PATH = Path(
     os.getenv(
         "CFB_LEDGER_PATH",
@@ -39,14 +48,25 @@ def _stamp(moment: datetime | None = None) -> str:
 
 def _load(path: Path) -> dict:
     if not path.is_file():
-        return {"schema_version": SCHEMA_VERSION, "snapshots": []}
+        return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": []}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload.get("snapshots"), list):
+            payload.setdefault("player_snapshots", [])
             return payload
     except (json.JSONDecodeError, AttributeError):
         pass
-    return {"schema_version": SCHEMA_VERSION, "snapshots": []}
+    return {"schema_version": SCHEMA_VERSION, "snapshots": [], "player_snapshots": []}
+
+
+def _parse(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def _write(path: Path, payload: dict) -> None:
@@ -109,6 +129,88 @@ def _grade(snapshot: dict, result: dict) -> None:
         )
 
 
+def _published_boxes(boxes: list["GameBox"]) -> dict[str, "GameBox"]:
+    """Event id -> completed box score that actually carries player lines."""
+    return {box.event_id: box for box in boxes if box.completed and box.players}
+
+
+def _grade_player(snapshot: dict, box: "GameBox") -> None:
+    line = next((p for p in box.players
+                 if p.athlete_id == snapshot["player_id"]
+                 and p.team_id == snapshot["team_id"]), None)
+    projected = snapshot.get("metrics") or {}
+    # The box score is published, so a player absent from it did not record a
+    # stat: that is a zero, not a missing observation.
+    actual = {key: float(getattr(line, key, 0.0) or 0.0) if line else 0.0
+              for key in projected}
+    snapshot.update({
+        "status": "graded",
+        "graded_at": _stamp(),
+        "played": line is not None,
+        "actual_metrics": actual,
+        "absolute_errors": {key: round(abs(float(value) - actual[key]), 3)
+                            for key, value in projected.items()},
+    })
+    if snapshot.get("anytime_td") is not None:
+        scored = float(bool(line and (line.rush_td + line.rec_td) > 0))
+        snapshot["actual_anytime_td"] = scored
+        snapshot["anytime_td_brier"] = round((float(snapshot["anytime_td"]) - scored) ** 2, 4)
+
+
+def _player_summary(payload: dict, season: int | None) -> dict:
+    rows = [row for row in payload.get("player_snapshots", [])
+            if row.get("status") == "graded"
+            and (season is None or row.get("season") == season)]
+    errors: dict[str, list[float]] = {}
+    for row in rows:
+        for metric, value in (row.get("absolute_errors") or {}).items():
+            errors.setdefault(metric, []).append(float(value))
+    return {
+        "scope": "latest pre-kickoff projection per player-game",
+        "authority": "shadow_only",
+        "players_graded": len(rows),
+        "pending_player_snapshots": sum(row.get("status") == "pending"
+                                        for row in payload.get("player_snapshots", [])),
+        "mae": {metric: round(statistics.fmean(values), 3)
+                for metric, values in sorted(errors.items()) if values},
+        "anytime_td_brier": _mean(rows, "anytime_td_brier"),
+    }
+
+
+_PLAY_FIELDS = (
+    "season", "week", "away", "home", "kickoff", "recorded_at", "model_regime", "book",
+    "book_margin", "book_total", "model_margin", "model_total", "status",
+    "actual_margin", "actual_total", "ats_result", "total_result", "graded_at", "authority",
+)
+
+
+def plays(payload: dict, *, season: int) -> list[dict]:
+    """One row per game: the last pre-kickoff snapshot, graded once final.
+
+    This is the readable log of what the board showed and how it came out; the
+    full ledger keeps every quote vintage.
+    """
+    latest: dict[tuple, dict] = {}
+    for row in payload.get("snapshots", []):
+        if row.get("season") != season:
+            continue
+        key = (row["season"], row["week"], row["home"], row["away"])
+        if key not in latest or row.get("recorded_at", "") > latest[key].get("recorded_at", ""):
+            latest[key] = row
+    out = []
+    for row in latest.values():
+        play = {field: row.get(field) for field in _PLAY_FIELDS}
+        model, line = row.get("model_margin"), row.get("book_margin")
+        if model is not None and line is not None and model != line:
+            play["ats_side"] = row["home"] if float(model) > float(line) else row["away"]
+        model_total, book_total = row.get("model_total"), row.get("book_total")
+        if model_total is not None and book_total is not None and model_total != book_total:
+            play["total_side"] = "over" if float(model_total) > float(book_total) else "under"
+        out.append(play)
+    return sorted(out, key=lambda play: (play["week"], play.get("kickoff") or "",
+                                         play["away"]))
+
+
 def _mean(rows: list[dict], key: str) -> float | None:
     values = [float(row[key]) for row in rows if row.get(key) is not None]
     return round(statistics.fmean(values), 3) if values else None
@@ -142,6 +244,7 @@ def summary(payload: dict, *, season: int | None = None) -> dict:
         "forecast_total_mae": _mean(rows, "forecast_total_abs_error"),
         "book_total_mae": _mean(rows, "book_total_abs_error"),
         "totals": {name: totals.count(name) for name in ("win", "loss", "push")},
+        "players": _player_summary(payload, season),
     }
 
 
@@ -151,6 +254,8 @@ def update(
     week: int,
     forecasts: list[tuple["Forecast", datetime | None]],
     season_games: list[dict],
+    player_projections: list[dict] | None = None,
+    player_boxes: list["GameBox"] | None = None,
     path: Path = DEFAULT_PATH,
     recorded_at: datetime | None = None,
 ) -> dict:
@@ -163,6 +268,14 @@ def update(
         result = results.get((snapshot["week"], snapshot["home"], snapshot["away"]))
         if result is not None:
             _grade(snapshot, result)
+
+    boxes = _published_boxes(player_boxes or [])
+    for snapshot in payload["player_snapshots"]:
+        if snapshot.get("status") != "pending":
+            continue
+        box = boxes.get(snapshot.get("event_id") or "")
+        if box is not None:
+            _grade_player(snapshot, box)
 
     now = recorded_at or _now()
     known = {row.get("snapshot_id") for row in payload["snapshots"]}
@@ -205,11 +318,58 @@ def update(
         })
         known.add(snapshot_id)
 
+    # Players: the latest pre-kickoff projection replaces an earlier pending
+    # one for the same player-game; a graded row is never touched again.
+    player_index = {row["snapshot_id"]: i for i, row in enumerate(payload["player_snapshots"])}
+    for projection in player_projections or []:
+        kickoff = _parse(projection.get("kickoff"))
+        event_id = str(projection.get("event_id") or "")
+        team_id = str(projection.get("team_id") or "")
+        player_id = str(projection.get("player_id") or "")
+        if kickoff is None or kickoff <= now or not (event_id and team_id and player_id):
+            continue
+        snapshot_id = "|".join((str(season), event_id, team_id, player_id))
+        existing = player_index.get(snapshot_id)
+        if (existing is not None
+                and payload["player_snapshots"][existing].get("status") != "pending"):
+            continue
+        row = {
+            "snapshot_id": snapshot_id,
+            "recorded_at": _stamp(now),
+            "season": season,
+            "week": week,
+            "event_id": event_id,
+            "kickoff": _stamp(kickoff),
+            "game_key": projection.get("game_key"),
+            "team": projection.get("team"),
+            "team_id": team_id,
+            "opponent": projection.get("opponent"),
+            "player_id": player_id,
+            "player_name": projection.get("player_name"),
+            "position": projection.get("position"),
+            "model_version": projection.get("model_version"),
+            "metrics": {key: dist.get("mean") for key, dist in
+                        (projection.get("stats") or {}).items()
+                        if isinstance(dist, dict) and dist.get("mean") is not None},
+            "anytime_td": projection.get("anytime_td"),
+            "status": "pending",
+            "authority": "shadow_only",
+        }
+        if existing is None:
+            player_index[snapshot_id] = len(payload["player_snapshots"])
+            payload["player_snapshots"].append(row)
+        else:
+            payload["player_snapshots"][existing] = row
+
     payload["schema_version"] = SCHEMA_VERSION
     payload["updated_at"] = _stamp(now)
     # Bound an accidental runaway while retaining three full seasons.
     payload["snapshots"] = [row for row in payload["snapshots"]
-                            if int(row.get("season", season)) >= season - 2][-5000:]
+                            if int(row.get("season", season)) >= season - 2][-MAX_SNAPSHOTS:]
+    payload["player_snapshots"] = [
+        row for row in payload["player_snapshots"]
+        if int(row.get("season", season)) > season - PLAYER_SEASONS_KEPT
+    ]
     payload["summary"] = summary(payload, season=season)
     _write(path, payload)
     return payload
