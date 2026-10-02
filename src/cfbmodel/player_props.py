@@ -151,6 +151,10 @@ class PlayerProjection:
     # The player's designation on this week's conference availability report
     # (questionable, probable, ...). None when unlisted or no report exists.
     availability: str | None = None
+    # Recency-weighted shares of team volume - the "why" behind a projection.
+    usage: dict[str, float] = field(default_factory=dict)
+    # Teammates listed out whose usage this player inherits this week.
+    absorbs: tuple[str, ...] = ()
 
 
 def team_totals(box: GameBox, team_id: str) -> dict[str, float]:
@@ -422,6 +426,14 @@ def project_team(hist: History, team_id: str, opponent_id: str, season: int, wee
             metrics={k: m[k] for k in MARKETS[position] if k in m},
             anytime_td=1.0 - math.exp(-lam) if lam > 0 else 0.0,
             availability=status_of.get(aid),
+            usage={key: round(share[stat], 3) for key, stat in (
+                ("pass_attempts", "pass_att"), ("carries", "rush_car"), ("targets", "rec"))
+                if share.get(stat)},
+            absorbs=tuple(sorted(
+                info[out]["name"] for out in ruled_out
+                if any(shares[out].get(stat, 0.0) > 0.05 and share.get(stat, 0.0) > 0
+                       for stat in _REDISTRIBUTED)
+            )) if ruled_out else (),
         ))
     return out
 
@@ -603,6 +615,10 @@ def build_slate(season: int, week: int, forecasts: list[tuple],
                     "stats": {k: distribution(k, v) for k, v in proj.metrics.items()},
                     "anytime_td": round(proj.anytime_td, 3) if proj.anytime_td is not None else None,
                     "availability": proj.availability,
+                    "usage": proj.usage,
+                    "absorbs": list(proj.absorbs),
+                    "team_implied_points": round((env.total + env.margin) / 2.0, 1),
+                    "team_margin": round(env.margin, 1),
                     "model_version": MODEL_VERSION,
                 })
     status["players"] = len(out)
