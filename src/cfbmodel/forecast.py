@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from cfbmodel import calibration, matrix, ratings, simulate, totals
+from cfbmodel import calibration, matrix, ratings, simulate, tiers, totals
 from cfbmodel.authority import Action, Authority, current
 
 # Fraction of model-vs-market disagreement retained in the published number.
@@ -110,6 +110,8 @@ class Forecast:
     simulated_margin: float | None = None
     simulated_win_probability: float | None = None
     home_field_points: float = 0.0
+    # Points added toward the Power-4 side of a P4-vs-G5 game (tiers.py).
+    tier_adjustment: float = 0.0
 
     @property
     def has_price(self) -> bool:
@@ -211,6 +213,7 @@ def game(
     season: int | None = None,
     simulations: int | None = None,
     home_field: float | None = None,
+    tier_orientation: int = 0,
 ) -> Forecast:
     """Forecast one game. `market_margin` is the expected HOME margin."""
     auth = authority or current()
@@ -239,6 +242,12 @@ def game(
         model_margin = calibration.EARLY_TRANSITION[week].apply(raw_model_margin)
     else:
         model_margin = raw_model_margin
+    # P4-vs-G5 correction, fitted season-held-out (see tiers.py). Applied after
+    # calibration so the scale corrections, fitted on all games, are unchanged.
+    tier_adjustment = 0.0
+    if model_margin is not None and tier_orientation:
+        tier_adjustment = tiers.SHIFT_POINTS["validated" if in_regime else "early"]             * tier_orientation
+        model_margin += tier_adjustment
 
     book_margin = getattr(book, "home_margin", None)
     book_total = getattr(book, "total", None)
@@ -356,6 +365,7 @@ def game(
         simulated_margin=sim_margin,
         simulated_win_probability=sim_win,
         home_field_points=0.0 if neutral else home_field,
+        tier_adjustment=tier_adjustment,
     )
 
 
