@@ -69,6 +69,24 @@ def _parse(value: str | None) -> datetime | None:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
+def _availability_snapshot(info: dict | None) -> dict | None:
+    if not info:
+        return None
+    report = info.get("report") or {}
+    listed = report.get("designations") or []
+    return {
+        "reported": bool(report),
+        "report": report.get("report"),
+        "published": report.get("published"),
+        "starting_qb": info.get("starting_qb"),
+        "starting_qb_status": info.get("starting_qb_status"),
+        "listed": {status: sum(d.get("status") == status for d in listed)
+                   for status in sorted({d.get("status") for d in listed})},
+        "listed_players": [[d.get("position"), d.get("player"), d.get("status")]
+                           for d in listed],
+    }
+
+
 def _write(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -181,6 +199,7 @@ _PLAY_FIELDS = (
     "season", "week", "away", "home", "kickoff", "recorded_at", "model_regime", "book",
     "book_margin", "book_total", "model_margin", "model_total", "status",
     "actual_margin", "actual_total", "ats_result", "total_result", "graded_at", "authority",
+    "edge_points", "edge_withheld_reason", "availability",
 )
 
 
@@ -256,6 +275,7 @@ def update(
     season_games: list[dict],
     player_projections: list[dict] | None = None,
     player_boxes: list["GameBox"] | None = None,
+    availability: dict | None = None,
     path: Path = DEFAULT_PATH,
     recorded_at: datetime | None = None,
 ) -> dict:
@@ -313,6 +333,14 @@ def update(
             "model_total": forecast.independent_total,
             "forecast_total": forecast.projected_total,
             "total_model_weight": forecast.total_model_weight,
+            "edge_points": forecast.edge_points,
+            "edge_withheld_reason": forecast.edge_withheld_reason,
+            # What the conference reports said when the quote was logged. This is
+            # the archive a college QB-availability coefficient will be fitted on.
+            "availability": {
+                side: _availability_snapshot((availability or {}).get(school))
+                for side, school in (("home", forecast.home), ("away", forecast.away))
+            },
             "status": "pending",
             "authority": "shadow_only",
         })
