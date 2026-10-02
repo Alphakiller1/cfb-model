@@ -59,7 +59,7 @@ def test_empty_response_is_never_cached(cache_dir, monkeypatch):
 
 def test_empty_then_populated_is_picked_up(cache_dir, monkeypatch):
     """The real failure: empty first, real data later, and the model must see it."""
-    calls = _stub_response(monkeypatch, [])
+    _stub_response(monkeypatch, [])
     assert cfbd.get("/talent?year=2026") == []
     _stub_response(monkeypatch, [{"team": "Georgia", "talent": 1003.67}])
     assert len(cfbd.get("/talent?year=2026")) == 1

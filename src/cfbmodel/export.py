@@ -38,7 +38,7 @@ from cfbmodel import ratings as ratings_mod
 from cfbmodel import simulate, teams
 from cfbmodel.ratings import FCS as RATINGS_FCS
 
-SCHEMA_VERSION = "3.1.0"
+SCHEMA_VERSION = "3.2.0"
 
 
 def _team(season: int, school: str) -> dict[str, Any]:
@@ -52,7 +52,9 @@ def _team(season: int, school: str) -> dict[str, Any]:
     }
 
 
-def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[str, Any]:
+def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None,
+          team_status: dict | None = None) -> dict[str, Any]:
+    team_status = team_status or {}
     return {
         "key": f"{forecast.away} @ {forecast.home}",
         "kickoff": kickoff.isoformat().replace("+00:00", "Z") if kickoff else None,
@@ -97,6 +99,13 @@ def _game(season: int, forecast: fc.Forecast, kickoff: datetime | None) -> dict[
             "last_update": forecast.book_last_update,
             "commence_time": forecast.book_commence_time,
         } if forecast.book_name else None,
+        # Conference availability report per side: the usual starting QB, his
+        # designation, and every listed player. None = no report filed (unknown,
+        # not healthy).
+        "availability": {
+            "home": team_status.get(forecast.home),
+            "away": team_status.get(forecast.away),
+        },
     }
 
 
@@ -148,20 +157,23 @@ def payload(
             "by_week": fc.TOTAL_MODEL_WEIGHT_BY_WEEK,
             "mature": fc.MATURE_TOTAL_MODEL_WEIGHT,
         },
-        "games": [_game(season, forecast, kickoff) for forecast, kickoff in ordered],
+        "games": [_game(season, forecast, kickoff,
+                        (player_projections or ([], {}))[1].get("teams"))
+                  for forecast, kickoff in ordered],
         "player_projections": (player_projections or ([], {}))[0],
         "player_projections_status": (player_projections or ([], {}))[1],
     }
 
 
 
-def player_projections(season: int, week: int, rows: list) -> tuple[list[dict], dict]:
+def player_projections(season: int, week: int, rows: list,
+                       reports: dict | None = None) -> tuple[list[dict], dict]:
     """The player layer, fail-soft: a feed or code failure publishes an empty
     list with the reason, never a missing board."""
     from . import player_props
 
     try:
-        return player_props.build_slate(season, week, rows)
+        return player_props.build_slate(season, week, rows, reports)
     except Exception as exc:  # the game board must still ship
         return [], {"model_version": player_props.MODEL_VERSION, "games": 0, "players": 0,
                     "issues": [f"player projections failed: {type(exc).__name__}: {exc}"]}

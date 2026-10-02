@@ -21,13 +21,13 @@ import gzip
 import html
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import export, ledger, matrix, preseason, ratings, teams, totals
+from cfbmodel import export, ledger, matrix, ratings, teams, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -140,6 +140,9 @@ class Row:
     # this is what the board sorts on, so ordering never depends on how the
     # label happens to be rendered.
     kickoff_utc: datetime | None = None
+    # Per side ("home"/"away"): the conference availability report summary that
+    # `player_props.build_slate` publishes. None = no report filed.
+    availability: dict | None = None
 
     @property
     def sort_key(self) -> tuple[int, float]:
@@ -489,6 +492,50 @@ def _breakdown(row: Row, season: int, rating_table: dict[str, float],
     return _bd_shell(row, season, "".join(parts), note)
 
 
+# Severe-first, so the card names the players who matter before the probables.
+_AVAIL_LABEL = {
+    "out": "Out", "out_first_half": "Out 1H", "doubtful": "Doubtful",
+    "questionable": "Questionable", "game_time_decision": "GTD", "probable": "Probable",
+}
+_AVAIL_SHOWN = 4
+
+
+def _availability(row: Row) -> str:
+    """One line per side from the conference availability report.
+
+    A side with no report says so: an unlisted team is unknown, not healthy.
+    """
+    sides = row.availability or {}
+    f = row.forecast
+    if not any(sides.get(side) and sides[side].get("report") for side in ("away", "home")):
+        return ""
+    lines = []
+    for side, school in (("away", f.away), ("home", f.home)):
+        info = sides.get(side) or {}
+        report = info.get("report")
+        if not report:
+            lines.append(f'<div class="avail-row"><b>{esc(school)}</b> · no availability report</div>')
+            continue
+        listed = report.get("designations") or []
+        qb, qb_status = info.get("starting_qb"), info.get("starting_qb_status")
+        qb_html = ""
+        if qb and qb_status:
+            cls = ("avail-qb--out" if qb_status in fc.QB_UNAVAILABLE else "avail-qb--q")
+            qb_html = (f' · <span class="{cls}">QB {esc(qb)}: '
+                       f'{esc(_AVAIL_LABEL.get(qb_status, qb_status))}</span>')
+        named = [d for d in listed if d.get("status") != "probable"]
+        shown = ", ".join(
+            f"{esc(' '.join(filter(None, (d.get('position'), d.get('player')))))} "
+            f"({esc(_AVAIL_LABEL.get(d.get('status'), d.get('status') or ''))})"
+            for d in named[:_AVAIL_SHOWN]
+        )
+        more = len(named) - _AVAIL_SHOWN
+        detail = (shown + (f" +{more} more" if more > 0 else "")) if named else "nobody listed out"
+        stage = esc(report.get("report") or "report")
+        lines.append(f'<div class="avail-row"><b>{esc(school)}</b> · {stage}{qb_html} · {detail}</div>')
+    return f'<div class="avail">{"".join(lines)}</div>'
+
+
 def _game_card(row: Row, season: int, rating_table: dict[str, float],
                comps: dict | None = None) -> str:
     f = row.forecast
@@ -520,7 +567,7 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
     note = "model only — no market price" if not f.has_price else (
         "independent model vs the live book")
     if f.edge_withheld_reason:
-        note = esc(f.edge_withheld_reason)
+        note = f.edge_withheld_reason
     elif not f.used_efficiency:
         note = "preseason prior — no observed form yet"
     # Last, because it outranks the others: a programme in its first FBS season
@@ -571,6 +618,7 @@ def _game_card(row: Row, season: int, rating_table: dict[str, float],
 <div class="gn"><span class="gn-l">{edge_label}</span>
 <span class="gn-v {edge_cls}">{_fmt(edge_value)}</span>{gap_sub}</div>
 </div>
+{_availability(row)}
 {_breakdown(row, season, rating_table, comps)}
 <div class="game-foot"><span class="badge {badge}">{esc(f.action.value)}</span>
 <span class="foot-note">{esc(note)}</span></div>
@@ -647,7 +695,7 @@ def _ratings_table(season: int, table: dict[str, float], limit: int = 40) -> str
                 if team.logo else '<span class="rt-logo"></span>')
         cls = "rt-pos" if value > 0 else "rt-neg"
         width = min(100.0, abs(value) / span * 100.0)
-        side = "left:50%" if value > 0 else f"right:50%"
+        side = "left:50%" if value > 0 else "right:50%"
         rows.append(
             f'<tr><td class="rt-rank">{i}</td>'
             f'<td><div class="rt-team">{logo}<span>{esc(school)}</span></div></td>'
@@ -872,7 +920,7 @@ market and its authority is RESEARCH_ONLY; nothing here is a recommendation to w
 def build(*, season: int, week: int, out: Path) -> Path:
     """Fetch, forecast, and write the dashboard."""
     from cfbmodel import cli  # local import: cli owns the data assembly
-    from cfbmodel.sources import cfbd, espn_box, oddsapi
+    from cfbmodel.sources import availability, cfbd, espn_box, oddsapi
 
     generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     cfbd.clear_run_state()
@@ -956,8 +1004,24 @@ def build(*, season: int, week: int, out: Path) -> Path:
 
     # Grade prior snapshots before recording this build. The ledger refuses to
     # record a game after kickoff, which protects the record from hindsight.
+    # Conference availability reports: who is listed out, and whether that
+    # includes a team's usual starting quarterback.
+    try:
+        raw_reports, availability_status = availability.fetch_all()
+        team_reports = availability.team_reports(raw_reports, teams.load(season))
+    except Exception as exc:
+        team_reports = {}
+        availability_status = [{"source": "all", "state": "error",
+                                "error": f"{type(exc).__name__}: {exc}"}]
     board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
-    player_payload = export.player_projections(season, week, board_rows)
+    player_payload = export.player_projections(season, week, board_rows, team_reports)
+    team_status = player_payload[1].get("teams") or {}
+    rows = [replace(row,
+                    forecast=fc.withhold_for_availability(row.forecast, team_status),
+                    availability={"home": team_status.get(row.forecast.home),
+                                  "away": team_status.get(row.forecast.away)})
+            for row in rows]
+    board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
     try:
         # Box scores grade the player rows. Completed games are cached
         # permanently, so this is a cheap re-read on every build after the first.
@@ -974,6 +1038,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
             season_games=season_games,
             player_projections=player_payload[0],
             player_boxes=player_boxes,
+            availability=team_status,
             recorded_at=generated_at,
         )
         record_summary = ledger_payload.get("summary", {})
@@ -1006,6 +1071,9 @@ def build(*, season: int, week: int, out: Path) -> Path:
         issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
     if ledger_error:
         issues.append(f"Shadow ledger unavailable: {ledger_error}")
+    failed_reports = [st["source"] for st in availability_status if st.get("state") == "error"]
+    if failed_reports:
+        issues.append(f"Availability report source(s) unavailable: {', '.join(failed_reports)}")
     # From week 2 every rated matchup should carry observed form. In September
     # 2026 weeks 3-5 shipped on preseason ratings alone for days because the
     # efficiency feed was empty, and nothing on the board said so.
@@ -1042,6 +1110,14 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "max_live_age_seconds": max(live_ages) if live_ages else None,
         "cfbd": endpoint_status,
         "odds": odds_status,
+        "availability": {
+            "sources": availability_status,
+            "team_reports": len(team_reports),
+            "edges_withheld_for_qb": sum(
+                "availability report" in (row.forecast.edge_withheld_reason or "")
+                for row in rows
+            ),
+        },
         "issues": list(dict.fromkeys(issues)),
     }
 

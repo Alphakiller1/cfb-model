@@ -159,6 +159,13 @@ text-transform:uppercase;border-radius:999px;padding:4px 11px;border:1px solid v
 .badge-bet{color:var(--green);border-color:rgba(60,203,127,.4)}
 .foot-note{color:var(--text-3);font-size:11.5px}
 
+/* conference availability report */
+.avail{padding:9px 16px;border-top:1px solid var(--border-soft);font-size:11.5px;
+color:var(--text-3);display:grid;gap:4px}
+.avail-row b{color:var(--text-2);font-weight:600}
+.avail-qb--out{color:var(--ca-red);font-weight:600}
+.avail-qb--q{color:var(--gold);font-weight:600}
+
 /* breakdown */
 details.bd{border-top:1px solid var(--border-soft)}
 details.bd>summary{cursor:pointer;list-style:none;padding:10px 16px;color:var(--text-2);

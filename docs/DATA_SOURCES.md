@@ -69,34 +69,43 @@ code is worth writing. Nothing in this repo can substitute for them, and a
 proxy built from play-by-play (guessing pass/run tendency by down and distance)
 would be a different, weaker feature wearing the name.
 
-### Injuries and availability
+### Injuries and availability — now wired (2026-10-02), not yet fitted
 
-**CFBD has no injuries endpoint.** The public alternatives are unofficial
-scrapes of team availability reports and beat coverage. Two problems, and the
-second is the disqualifying one:
+**CFBD still has no injuries endpoint, and ESPN's college injuries feed is dead**
+(three rows, all 2020–22). But the premise this section used to rest on — "college
+football has no injury-report mandate" — stopped being true. The SEC (2024), ACC,
+Big 12 (2025-26), Big Ten (four reports a week from 2026), Pac-12 and MAC now
+require a public availability report for every **conference** game: initial
+report three days out, daily updates, a game-day report before kickoff.
 
-1. They are inconsistent between programmes — college football has no league
-   injury-report mandate the way the NFL does.
-2. **There is no historical archive.** A feature that cannot be reconstructed
-   point-in-time for 2019–2025 cannot be backtested, so it can never clear the
-   walk-forward bar every other number in this repo had to clear. It would be
-   adopted on faith.
+`sources/availability.py` reads them from the two publishers the conferences
+embed — HD Intelligence (`POST /api/get-publish-public`: SEC, ACC, B10, B12, MAC)
+and the Pac-12's `report.json` — and what the board does with them:
 
-The realistic paths, in order of cost:
+| Use | Rule |
+| --- | --- |
+| Player projections | Out / Doubtful players are removed; their carries and targets flow to available teammates (capped at 1.5x). A listed-out starting QB hands the role to his backup. Questionable stays in, flagged on the row. |
+| Edge | If either team's **usual starting QB** (most recency-weighted attempts) is Out / Doubtful / Out 1st half, `edge_points` is withheld with the reason. The margin is **not** adjusted. |
+| Board | Each card shows both teams' latest report, the starting QB's designation, and who is listed. A team with no report says so — unknown, not healthy. |
+| Ledger | Every game snapshot records both teams' report at quote time. |
 
-- A paid odds/data vendor with an injury feed **and history** (SportsDataIO,
-  Sportradar). This is the only one that can be validated.
-- Scrape forward from today and revisit in two seasons, when there is enough
-  archive to test against. Cheap, slow, honest.
-- Use the market as the injury proxy — raise `forecast.DEFAULT_LAM` above zero
-  so the price carries the information the model cannot see. This is not free:
-  it makes the model partly a market-follower, and `authority.py` is explicit
-  that raising `lam` is a claim about evidence that belongs with a gate record.
+Why the margin is not adjusted: the NFL board has a fitted `QB_OUT_POINTS`
+(4.19, time-forward). The college equivalent cannot be fitted yet — reports only
+exist from 2024 (SEC) and 2025-26 (the rest), and only for conference games.
+Withholding the edge is the honest step until there is an archive. HD
+Intelligence's `get-archive-public` endpoint returns each conference's
+season-to-date report history (every stage per player), and the ledger now
+archives forward, so the fit is a 2027 job rather than a never job.
+
+Still not covered: non-conference games, and the AAC, Mountain West, Sun Belt,
+C-USA and independents, which publish no report.
 
 ## The order worth doing
 
 1. **Maintain the forward shadow record.** Historical improvements do not
    establish 2026 performance; every pre-kickoff quote now enters the ledger.
 2. **Venue home field.** Wired, needs the fit.
-3. **Buy charting or injury data, or accept the gap and say so.** The one thing
-   not worth doing is pretending a proxy closes it.
+3. **Fit a college QB-availability term** once the report archive covers enough
+   games (HD Intelligence archive + the ledger's forward record).
+4. **Buy charting data, or accept the gap and say so.** The one thing not worth
+   doing is pretending a proxy closes it.
