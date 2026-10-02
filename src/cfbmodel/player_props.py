@@ -49,6 +49,9 @@ TEAM_PSEUDO_GAMES = 2.0
 # otherwise have nothing) but much less than this season's.
 PRIOR_SEASON_WEIGHT = 0.30
 PRIOR_SEASON_PLAYER_WEIGHT = 0.25
+# A starter's attempt share is floored here: blowouts where the backup finished
+# dilute the observed share below what he throws in a game he plays through.
+QB_ATTEMPT_FLOOR = 0.88
 
 # Fitted by scripts/fit_player_props.py: tested fit-2024 -> 2025, shipped on both.
 # Per team stat: (own offence, opponent allowed, team margin, implied points),
@@ -381,7 +384,7 @@ def project_team(hist: History, team_id: str, opponent_id: str, season: int, wee
         if aid == starter:
             # A starter's attempt share is his share in the games he played, not
             # diluted by blowouts where the backup finished - floor it.
-            att_share = max(share["pass_att"], 0.88)
+            att_share = max(share["pass_att"], QB_ATTEMPT_FLOOR)
             scale = att_share / share["pass_att"] if share["pass_att"] else 1.0
             m["pass_att"] = team["pass_att"] * att_share
             m["pass_cmp"] = team["pass_cmp"] * min(0.99, share["pass_cmp"] * scale)
