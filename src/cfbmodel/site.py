@@ -17,6 +17,7 @@ dashboard that opened with a big confident number would be lying about that.
 
 from __future__ import annotations
 
+import gzip
 import html
 import json
 import os
@@ -871,7 +872,7 @@ market and its authority is RESEARCH_ONLY; nothing here is a recommendation to w
 def build(*, season: int, week: int, out: Path) -> Path:
     """Fetch, forecast, and write the dashboard."""
     from cfbmodel import cli  # local import: cli owns the data assembly
-    from cfbmodel.sources import cfbd, oddsapi
+    from cfbmodel.sources import cfbd, espn_box, oddsapi
 
     generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     cfbd.clear_run_state()
@@ -955,13 +956,25 @@ def build(*, season: int, week: int, out: Path) -> Path:
 
     # Grade prior snapshots before recording this build. The ledger refuses to
     # record a game after kickoff, which protects the record from hindsight.
+    board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
+    player_payload = export.player_projections(season, week, board_rows)
+    try:
+        # Box scores grade the player rows. Completed games are cached
+        # permanently, so this is a cheap re-read on every build after the first.
+        player_boxes = espn_box.season_boxes(season, through_week=week)
+    except Exception:
+        player_boxes = []
     record_summary: dict = {}
+    ledger_payload: dict | None = None
     ledger_error = None
     try:
         ledger_payload = ledger.update(
             season=season, week=week,
-            forecasts=[(row.forecast, row.kickoff_utc) for row in rows],
-            season_games=season_games, recorded_at=generated_at,
+            forecasts=board_rows,
+            season_games=season_games,
+            player_projections=player_payload[0],
+            player_boxes=player_boxes,
+            recorded_at=generated_at,
         )
         record_summary = ledger_payload.get("summary", {})
     except Exception as exc:
@@ -1036,11 +1049,10 @@ def build(*, season: int, week: int, out: Path) -> Path:
 
     # Publish machine-readable evidence beside the page. Monitoring can inspect
     # freshness and sportsbook coverage without scraping presentation markup.
-    board_rows = [(row.forecast, row.kickoff_utc) for row in rows]
     export.write(
         export.payload(season=season, week=week, rows=board_rows,
                        authority=authority, generated_at=generated_at,
-                       player_projections=export.player_projections(season, week, board_rows)),
+                       player_projections=player_payload),
         out.parent / "board.json",
     )
     export.write(
@@ -1062,4 +1074,14 @@ def build(*, season: int, week: int, out: Path) -> Path:
     (out.parent / "record.json").write_text(
         json.dumps(record_summary, indent=2) + "\n", encoding="utf-8"
     )
+    if ledger_payload is not None:
+        # The published copy is the durable one: CI restores from it when the
+        # Actions cache has been evicted, so the record never silently restarts.
+        (out.parent / "plays.json").write_text(
+            json.dumps(ledger.plays(ledger_payload, season=season), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (out.parent / "ledger.json.gz").write_bytes(
+            gzip.compress(json.dumps(ledger_payload).encode("utf-8"), mtime=0)
+        )
     return out

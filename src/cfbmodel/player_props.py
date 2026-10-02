@@ -514,7 +514,7 @@ def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[di
         home, away = sides.get("home") or {}, sides.get("away") or {}
         if home.get("id") and away.get("id"):
             by_pair[(normalise(home.get("location") or ""), normalise(away.get("location") or ""))] = (
-                str(home["id"]), str(away["id"]))
+                str(home["id"]), str(away["id"]), str(event.get("id") or ""))
 
     out: list[dict] = []
     for forecast, kickoff in forecasts:
@@ -534,6 +534,8 @@ def build_slate(season: int, week: int, forecasts: list[tuple]) -> tuple[list[di
             for proj in project_team(hist, team_id, opp_id, season, week, env, positions):
                 out.append({
                     "game_key": f"{forecast.away} @ {forecast.home}",
+                    "event_id": ids[2],
+                    "team_id": team_id,
                     "kickoff": kickoff.isoformat().replace("+00:00", "Z") if kickoff else None,
                     "team": school,
                     "opponent": opponent,
