@@ -184,3 +184,12 @@ def test_game_probabilities_give_the_model_only_its_earned_weight():
     early_pick = bb.spread_pick(site.Row(early, "Sat", None, None, kickoff_utc=KICKOFF),
                                 season=2026, week=3, ranks={}, team_status={})
     assert early_pick.probability < pick.probability
+
+
+def test_evidence_gate_line():
+    assert "None graded yet" in site._gate_line({})
+    small = site._gate_line({"spread": {"win": 30, "loss": 20}})
+    assert "50 of 200" in small and "not met" in small
+    strong = site._gate_line({"spread": {"win": 160, "loss": 100}, "total": {"win": 0,
+                                                                         "loss": 0}})
+    assert "met." in strong and "not met" not in strong
