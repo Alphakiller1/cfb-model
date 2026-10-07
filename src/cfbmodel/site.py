@@ -27,7 +27,8 @@ from pathlib import Path
 
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
-from cfbmodel import best_bets, export, ledger, matrix, ratings, sharp, teams, tiers, totals
+from cfbmodel import (best_bets, export, ledger, matrix, ratings, sharp, teams, tiers, totals,
+                      volatility)
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -76,7 +77,7 @@ def _css() -> str:
     tokens = (v1.read_text(encoding="utf-8") + "\n") if v1.is_file() else ""
     tokens += (_STATIC / "chase_tokens.css").read_text(encoding="utf-8")
     board = (_STATIC / "board.css").read_text(encoding="utf-8")
-    return tokens + "\n" + _FONT_VARS + "\n" + board
+    return tokens + "\n" + _FONT_VARS + "\n" + board + volatility.CSS
 
 
 def _fmt(value: float | None, places: int = 1, sign: bool = True) -> str:
@@ -162,6 +163,7 @@ def _nav(season: int, week: int) -> str:
 <a class="nav-link" href="#board">Board</a>
 <a class="nav-link" href="#ratings">Power Ratings</a>
 <a class="nav-link" href="#conferences">Conferences</a>
+<a class="nav-link" href="#volatility">Volatility</a>
 <a class="nav-link" href="#method">Methodology</a>
 </div>
 <div class="chase-status"><span class="product-tag">CFB MODEL</span>
@@ -939,7 +941,8 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
            health: dict | None = None,
            record: dict | None = None,
            generated_at: datetime | None = None,
-           picks: list | None = None, spots: list | None = None) -> str:
+           picks: list | None = None, spots: list | None = None,
+           volatility_payload: dict | None = None) -> str:
     conference_table = _conference_table(conference_rows or [], rating_table,
                                          conference_of or {})
     generated = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
@@ -965,6 +968,11 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
 
     cards = "".join(_game_card(r, season, rating_table, comps) for r in rows) or (
         '<p class="dim">No FBS-vs-FBS games found for this week.</p>')
+    volatility_section = volatility.render_section(
+        # FBS only; an unreadable team list shows everyone rather than no one.
+        volatility_payload, eyebrow="04 · Volatility", ranked=set(teams.load(season)) or None,
+        logo=lambda school: teams.get(season, school).logo,
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -1029,8 +1037,10 @@ than the ordering inside it.</p>
 {conference_table}
 </section>
 
+{volatility_section}
+
 <section id="method">
-<div class="sec-eyebrow">04 · Method</div>
+<div class="sec-eyebrow">05 · Method</div>
 <h2 class="sec-title">Methodology</h2>
 <p class="sec-blurb">Every constant below was measured on 3,256 out-of-sample games rather
 than assumed. Full evidence lives in <code>reports/BASELINE_2019_2025.md</code>.</p>
@@ -1219,6 +1229,17 @@ def build(*, season: int, week: int, out: Path) -> Path:
     except Exception as exc:
         ledger_error = f"{type(exc).__name__}: {exc}"
 
+    # Team volatility, from this season's graded ledger rows plus the fitted
+    # prior season. A failure costs the section, never the board.
+    volatility_payload: dict | None = None
+    volatility_error = None
+    try:
+        snapshots = (ledger_payload or ledger._load(ledger.DEFAULT_PATH)).get("snapshots", [])
+        volatility_payload = volatility.build(snapshots, season=season,
+                                              margin_sd=ratings.MARGIN_SD)
+    except Exception as exc:
+        volatility_error = f"{type(exc).__name__}: {exc}"
+
     endpoint_status = cfbd.status_report()
     current_status = [status for status in endpoint_status
                       if str(season) in status["path"]]
@@ -1245,6 +1266,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
     if ledger_error:
         issues.append(f"Shadow ledger unavailable: {ledger_error}")
+    if volatility_error:
+        issues.append(f"Team volatility ranking failed: {volatility_error}")
     if issues_props:
         issues.append(f"Best bets / props: {issues_props}")
     failed_reports = [st["source"] for st in availability_status if st.get("state") == "error"]
@@ -1309,7 +1332,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
                        rating_table=rating_table, authority=authority, comps=comps,
                        conference_rows=conference_rows, conference_of=conference_of,
                        health=health, record=record_summary, generated_at=generated_at,
-                       picks=picks, spots=spots)
+                       picks=picks, spots=spots, volatility_payload=volatility_payload)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
 
@@ -1342,6 +1365,10 @@ def build(*, season: int, week: int, out: Path) -> Path:
     (out.parent / "record.json").write_text(
         json.dumps(record_summary, indent=2) + "\n", encoding="utf-8"
     )
+    if volatility_payload is not None:
+        (out.parent / "volatility.json").write_text(
+            json.dumps(volatility_payload, indent=2) + "\n", encoding="utf-8"
+        )
     if ledger_payload is not None:
         # The published copy is the durable one: CI restores from it when the
         # Actions cache has been evicted, so the record never silently restarts.

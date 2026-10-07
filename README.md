@@ -158,6 +158,27 @@ venue-specific home field and a fitted college QB-availability term (reports
 are now read live and archived; see `docs/DATA_SOURCES.md`) — are in
 [`reports/BASELINE_2019_2025.md`](reports/BASELINE_2019_2025.md).
 
+## Team volatility rankings
+
+Every FBS team is ranked on four markets: how reliably its spread, moneyline,
+over and under outcomes land where the model's own pre-game numbers project.
+Each team is scored on the miss that loses that bet. The ranking is
+predictive only where volatility proved to be a team trait. A walk-forward
+replay of 3,723 games (2021–2025) scored each season held out:
+
+| Market | Held-out skill | Basis |
+| --- | ---: | --- |
+| Spread | −0.42% (0/5 seasons) | descriptive — not a team trait |
+| Moneyline | +0.64% (3/5) | predictive, weak |
+| Over | +3.49% (3/5) | predictive |
+| Under | +2.97% (4/5) | predictive |
+
+Totals volatility carries across seasons (r ≈ 0.22), consistent with program
+tempo and style. Spread volatility carries nothing. Predictive markets are shrunk
+toward the field (`k = 40` games for totals). Descriptive markets rank on this
+season's misses and say so. Evidence and method:
+[`reports/VOLATILITY_2026-10-07.md`](reports/VOLATILITY_2026-10-07.md).
+
 ## How it fits together
 
 | Module | Role |
