@@ -18,6 +18,7 @@ REQUIRED = (
     "College Football Model",
     "Board",
     "Power Ratings",
+    "Team Volatility Rankings",
     "Methodology",
     "RESEARCH_ONLY",
     "not betting advice",
