@@ -5,93 +5,125 @@
 For each team and each market (spread, moneyline, over, under): when the
 advanced metrics project this team's game, how reliably does the result land
 there, and how often does it stray in the direction that loses that bet? Rank 1
-conforms most. The question is about conformity to **our** metrics, so every
-game is scored against the model's own pre-game numbers, never the market's.
+conforms most. Every game is scored against the model's own pre-game numbers,
+never the market's.
 
-| Market | Per-game score, from the team's side |
+| Market | Per-game miss, from the team's side |
 | --- | --- |
 | Spread | `|actual margin − model margin|` |
-| Moneyline | `|won − p| − 2p(1−p)`, `p = Φ(model margin / 24.2)` — surprise beyond what `p` itself implied |
-| Over | `max(model total − actual total, 0)` — the shortfall that loses an over |
-| Under | `max(actual total − model total, 0)` — the overshoot that loses an under |
+| Moneyline | `|won − p| − 2p(1−p)`, `p = Φ(model margin / 24.2)`: surprise beyond what `p` itself implied |
+| Over | `max(model total − actual total, 0)`: the shortfall that loses an over |
+| Under | `max(actual total − model total, 0)`: the overshoot that loses an under |
 
-The moneyline term subtracts its own expectation, so a team that only plays
-coin flips is not called volatile for losing half of them. Over and under are
-scored separately because they fail on opposite tails.
+## Predictive philosophy
 
-## Is it a team trait?
+The target is always a team's **future actual misses**, because that is what
+settles a bet. Three ingredients were built, and each ships only if it improves
+held-out prediction of that target.
 
-A season is ten to twelve FBS games, and most of the spread in raw team misses
-is luck. So the first question is whether a team's volatility **predicts its
-future volatility** at all. Data: a walk-forward replay of the production path
-(`scripts/fit_volatility.py assemble`), using only games before each week:
-ratings, opponent-adjusted form, venue home field, the tier term and the scoring
-prior. That gives **3,723 FBS-vs-FBS games, 2021–2025, 664 team-seasons**.
+1. **Noise cancellation.** A stats-implied outcome model asks what the margin and
+   total should have been, given each game's own process stats: success rate,
+   explosiveness, stuff rate, plays and drives, with garbage time excluded.
+   PPA is left out because it carries turnover plays at full weight. On 3,723
+   games those stats explain **74% of final margins and 56% of totals**. The rest
+   (luck SD 10.5 points) is turnovers, sequencing and bounces. A team's
+   **noise-cancelled score (NC)** is its miss measured against that stats-implied
+   outcome instead of the final score.
+2. **Consistency prior.** Instead of shrinking every team toward the league
+   average, shrink it toward what its *process consistency* predicts: the
+   game-to-game SD of its success and explosive-play rates, on offence and on
+   defence. Form *levels* were tested first (opponent-adjusted PPA, success,
+   explosiveness, stuff rate, tempo); no feature correlated with future
+   volatility beyond |r| = 0.08, and the prior built on them lost held-out skill
+   in every market, so it was replaced. Consistency was the stronger idea: a
+   team that sometimes stalls and sometimes doesn't is one a model built on
+   averages will miss.
+3. **Shrinkage.** `expected = base + w·(observed − base)`, with
+   `w = n_eff / (n_eff + k)` and `n_eff = this season's games + decay ·
+   last season's`.
 
-Each team's predicted volatility is its observed mean shrunk toward the field:
+Four nested variants were scored per market: plain shrinkage, plus noise
+cancellation, plus the consistency prior, and both. Each was scored **two
+ways**: every season predicted with parameters chosen on the other four
+(leave-one-season-out, LOSO), and every season predicted with parameters chosen
+on *earlier seasons only* (time-forward). A market counts as a team trait only
+if its variant beats "every team is average" overall **and** in a majority of
+seasons, **under both schemes**.
 
-    expected = pool + w · (observed − pool),   w = n_eff / (n_eff + k)
-    n_eff    = games this season + decay · games last season
+Data: a walk-forward replay of the production path (`scripts/fit_volatility.py
+assemble`), using only games before each week: 3,723 FBS-vs-FBS games,
+2021–2025, 664 team-seasons.
 
-`k` and `decay` are chosen per market to predict the **second half** of a team's
-season from its first half plus last season. Each season is scored with
-parameters chosen on the other four. Skill is the held-out reduction in squared
-error against "every team is average". A market counts as a trait only if that
-skill is positive overall **and** in a majority of seasons.
+## Results
 
-| Market | Held-out skill | Seasons better | First → second half r | Season → next r | k | Last-season weight | Verdict |
-| --- | ---: | :---: | ---: | ---: | ---: | ---: | --- |
-| Spread | −0.42% | 0 / 5 | −0.04 | 0.02 | — | — | **noise** |
-| Moneyline | +0.64% | 3 / 5 | 0.05 | 0.07 | 100 | 0.75 | weak trait |
-| Over | +3.49% | 3 / 5 | 0.06 | 0.21 | 40 | 1.0 | **trait** |
-| Under | +2.97% | 4 / 5 | 0.13 | 0.22 | 40 | 1.0 | **trait** |
+Held-out skill against "every team is average" (seasons better in brackets):
 
-**Spread volatility is not a team property.** How far a team's margins stray
-from the projection carried nothing forward, half-to-half or season-to-season.
-No parameter beat calling every team average in any held-out season.
+| Market | plain | + noise cancellation | + consistency prior | both | Ships |
+| --- | --- | --- | --- | --- | --- |
+| Spread | −0.27% (1/5) · +0.28% (1/4) | +0.86% (4/5) · −0.36% (2/4) | **+0.22% (4/5) · +0.22% (3/4)** | +1.28% (4/5) · −0.42% (2/4) | consistency prior |
+| Moneyline | +0.83% (3/5) · +0.98% (2/4) | same as plain | −0.47% · −1.37% | same | **descriptive** |
+| Over | **+3.49% (3/5) · +3.61% (3/4)** | +3.27% · +0.37% (2/4) | +4.51% (4/5) · +2.58% (2/4) | +4.08% · −0.27% | plain |
+| Under | **+2.81% (4/5) · +2.89% (3/4)** | same as plain | +2.44% · +3.09% | same | plain |
 
-**Totals volatility is.** Which teams' games run past, or fall short of, the
-projected total persists, and persists *across* seasons (r ≈ 0.22) more than
-within one. That fits program style and tempo, which outlast a roster. Last
-season's games earn full weight. Even so, `k = 40` means a team needs 40 games
-of evidence to be half-trusted: after a full prior season plus five current
-games, the ranking moves a team about 27% of the way from the field toward its
-own record.
+Each cell is LOSO · time-forward.
 
-**Moneyline is marginal.** It passes the bar, but at +0.6% with 3 of 5 seasons
-better, it is the weakest signal shipped and should be read that way.
+What this says:
 
-For scale, a positive skill of a few percent is close to the ceiling. The
-second-half target is the mean of five or six noisy games, so even perfect
-knowledge of each team's true volatility could explain only a small share of
-it.
+* **Totals volatility is the real trait.** Over and under pass both schemes
+  with plain shrinkage (`k = 40` games, last season at full weight). Which
+  programs' games run past or fall short of the projected total carries across
+  seasons (r ≈ 0.22), consistent with tempo and style.
+* **Spread moves from noise to weakly predictive**, through the consistency
+  prior alone. A team's own spread-miss record still predicts nothing (`k` is
+  infinite), but its process consistency does, a little. The fitted sign is
+  counterintuitive: teams whose success rate swings more get slightly *smaller*
+  future spread misses (−0.36 points per SD of offensive swing, on a 14.6-point
+  average miss). One reading is that large swings mostly reflect mismatched
+  opponents, which the model prices well. The effect is +0.2%, the smallest
+  that passes, and should be read as weak.
+* **Moneyline is descriptive.** It looked like a weak trait under LOSO alone,
+  but fit only on earlier seasons it helps in just 2 of 4. The audit on October
+  7 flagged exactly this, and the two-scheme bar now enforces it.
+* **Noise cancellation does not improve prediction.** Luck-stripped misses
+  forecast future actual misses no better than raw ones, and its LOSO gains on
+  spread do not survive time-forward. It ships as a published diagnostic (NC)
+  and not as a forecast input (`alpha = 0` in every market).
+* **The consistency prior's best totals number (over, +4.5% LOSO) fails
+  time-forward**, 2 of 4 seasons, so it does not ship there either.
 
 ## How production uses it
 
 `volatility.build` runs on every site build. It reads this season's graded games
-from the shadow ledger (the last snapshot recorded before kickoff, so the
-model's actual pre-game view) plus last season. Last season comes from the
-ledger when it has that season, or from the per-team aggregate shipped in
-`volatility_fit.py`. The pool includes FCS opponents' games; only FBS teams are
-displayed.
+from the shadow ledger, taking the last snapshot recorded before kickoff. It
+joins each game to both sides' process lines from the same CFBD per-game rows
+the efficiency adjustment already fetched (memoised, so no extra calls). Last
+season comes from the ledger when it holds it, or from the per-team aggregate
+shipped in `volatility_fit.py`.
 
-* **Predictive** markets (trait) rank on the shrunk forecast. The steadiest and
-  most volatile fifths are graded.
-* **Descriptive** markets (noise: here, spread) cannot be shrunk without tying
-  every team at the pool. They rank on this season's observed misses, carry no
-  grade, and the page says plainly that it is what happened, not a forecast.
+* **Predictive** markets rank on the forecast, and the top and bottom fifths
+  are graded steady and volatile.
+* **Descriptive** markets rank on this season's observed misses, carry no
+  grade, and say plainly that it is what happened, not a forecast.
+* Every team carries its **NC** score on every market, alongside `luck` (raw
+  minus process) in `volatility.json`.
 
-The page section is "Team Volatility Rankings". The same payload is published
-as `volatility.json` beside `board.json`.
+## Audit, October 7
+
+The production matrix was re-derived with independent code against the live
+2026 ledger. Every per-game miss, pool, rank and forecast reproduced exactly.
+The ledger dedupe matched a separate implementation, and the replay's team
+alignment was verified game by game. The ledger stores `forecast.model_margin`
+and `independent_total`, the same quantities the replay records. Time-forward
+re-scoring found the only defect: moneyline's single-scheme pass, now fixed.
 
 ## Refitting
 
     python scripts/fit_volatility.py assemble --seasons 2021-2025   # CFBD permanent cache
     python scripts/fit_volatility.py fit
 
-`fit` writes the evidence (with per-season folds) to `reports/volatility_fit.json`
-and the shipped parameters to `src/cfbmodel/volatility_fit.py`. After the 2026
-season closes, the ledger itself becomes the prior season, so a refit is needed
-only to re-measure the trait verdicts.
+`fit` prints the ablation, writes the evidence with every fold to
+`reports/volatility_fit.json`, and writes the shipped parameters to
+`src/cfbmodel/volatility_fit.py`. A market that passes on a refit switches to
+predictive automatically.
 
 Research context, not a betting signal. Authority remains RESEARCH_ONLY.

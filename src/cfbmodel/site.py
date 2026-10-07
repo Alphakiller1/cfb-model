@@ -28,7 +28,7 @@ from pathlib import Path
 from cfbmodel import authority as auth_mod
 from cfbmodel import forecast as fc
 from cfbmodel import (best_bets, export, ledger, matrix, ratings, sharp, teams, tiers, totals,
-                      volatility)
+                      volatility, volatility_data)
 
 _STATIC = Path(__file__).resolve().parent / "static"
 
@@ -1235,8 +1235,12 @@ def build(*, season: int, week: int, out: Path) -> Path:
     volatility_error = None
     try:
         snapshots = (ledger_payload or ledger._load(ledger.DEFAULT_PATH)).get("snapshots", [])
+        # The same per-game rows `cli._forms` already fetched this build
+        # (memoised), so the process lines cost no further CFBD calls.
+        process = volatility_data.process_index(
+            cfbd.season_game_stats(season, through_week=week + 1), season)
         volatility_payload = volatility.build(snapshots, season=season,
-                                              margin_sd=ratings.MARGIN_SD)
+                                              margin_sd=ratings.MARGIN_SD, process=process)
     except Exception as exc:
         volatility_error = f"{type(exc).__name__}: {exc}"
 

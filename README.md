@@ -162,22 +162,29 @@ are now read live and archived; see `docs/DATA_SOURCES.md`) — are in
 
 Every FBS team is ranked on four markets: how reliably its spread, moneyline,
 over and under outcomes land where the model's own pre-game numbers project.
-Each team is scored on the miss that loses that bet. The ranking is
-predictive only where volatility proved to be a team trait. A walk-forward
-replay of 3,723 games (2021–2025) scored each season held out:
+Each team is scored on the miss that loses that bet.
 
-| Market | Held-out skill | Basis |
-| --- | ---: | --- |
-| Spread | −0.42% (0/5 seasons) | descriptive — not a team trait |
-| Moneyline | +0.64% (3/5) | predictive, weak |
-| Over | +3.49% (3/5) | predictive |
-| Under | +2.97% (4/5) | predictive |
+Each team also gets a **noise-cancelled score**: its miss against what each
+game's own process stats implied, instead of the final score. Those stats
+(success rate, explosiveness, tempo; nothing turnover-driven) explain 74% of
+final margins. Forecasts can shrink toward a **consistency prior**, the
+game-to-game swing in a team's success and explosive-play rates. A market is
+predictive only if its forecast beats "every team is average" on a walk-forward
+replay of 3,723 games (2021–2025) under *both* leave-one-season-out and
+time-forward scoring:
+
+| Market | Shipped | LOSO · time-forward skill |
+| --- | --- | ---: |
+| Spread | consistency prior, weak | +0.22% · +0.22% |
+| Moneyline | descriptive | fails time-forward (2/4) |
+| Over | shrinkage, `k = 40` | +3.49% · +3.61% |
+| Under | shrinkage, `k = 40` | +2.81% · +2.89% |
 
 Totals volatility carries across seasons (r ≈ 0.22), consistent with program
-tempo and style. Spread volatility carries nothing. Predictive markets are shrunk
-toward the field (`k = 40` games for totals). Descriptive markets rank on this
-season's misses and say so. Evidence and method:
-[`reports/VOLATILITY_2026-10-07.md`](reports/VOLATILITY_2026-10-07.md).
+tempo and style. Noise cancellation and the consistency prior were each scored
+as add-ons and ship only where they earned it. Noise cancellation never
+improved prediction, so it is published as a diagnostic. Evidence, ablation and
+audit: [`reports/VOLATILITY_2026-10-07.md`](reports/VOLATILITY_2026-10-07.md).
 
 ## How it fits together
 

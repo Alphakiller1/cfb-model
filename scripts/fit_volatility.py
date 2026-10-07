@@ -24,7 +24,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from cfbmodel import authority, cli, forecast, ratings, tiers, volatility  # noqa: E402
+from cfbmodel import (authority, cli, forecast, ratings, tiers, volatility,  # noqa: E402
+                      volatility_data)
 from cfbmodel.sources import cfbd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +45,9 @@ def assemble(seasons: list[int], last_week: int) -> list[dict]:
                 forms = cli._forms(season, week)
                 market, _ = cli._markets(cli.consensus_lines(season, week))
                 current_games = cli._current_season_games(season, week)
+                # This week's own box stats: what each game's process implied.
+                process = volatility_data.process_index(
+                    cfbd.game_advanced_stats(season, week=week), season)
                 season_games: list[dict] = []
                 for w in range(1, week + 1):
                     season_games.extend(cfbd.games(season, week=w))
@@ -84,6 +88,8 @@ def assemble(seasons: list[int], last_week: int) -> list[dict]:
                     "model_total": f.independent_total,
                     "actual_margin": float(hp - ap),
                     "actual_total": float(hp + ap),
+                    "home_process": process.get((season, week, home, away)),
+                    "away_process": process.get((season, week, away, home)),
                 })
                 n += 1
             print(f"{season} week {week}: {n} games", flush=True)
@@ -107,18 +113,19 @@ def main() -> int:
         return 0
 
     rows = json.loads(CACHE.read_text(encoding="utf-8"))
-    games = [volatility.GradedGame(**row) for row in rows]
+    fields = set(volatility.GradedGame.__dataclass_fields__)
+    games = [volatility.GradedGame(**{k: v for k, v in row.items() if k in fields})
+             for row in rows]
     seasons = sorted({g.season for g in games})
     result = volatility.fit(
         games, margin_sd=ratings.MARGIN_SD,
         source=f"walk-forward replay of the production path, CFBD {seasons[0]}-{seasons[-1]}",
+        process_features=volatility_data.PROCESS_FEATURES,
+        consistency_stats=volatility_data.CONSISTENCY_STATS,
     )
     REPORT.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     volatility.write_params_module(result, MODULE)
-    for market, row in result["markets"].items():
-        print(f"  {market:9s} trait={row['trait']!s:5s} k={row['k']} decay={row['decay']} "
-              f"skill={row['held_out_skill']:+.4f} split-half r={row['split_half_r']} "
-              f"next-season r={row['next_season_r']}")
+    print("\n".join(volatility.summary(result)))
     print(f"  wrote {REPORT} and {MODULE}")
     return 0
 
