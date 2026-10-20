@@ -22,7 +22,7 @@ import html
 import json
 import os
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cfbmodel import authority as auth_mod
@@ -30,6 +30,10 @@ from cfbmodel import forecast as fc
 from cfbmodel import best_bets, export, ledger, matrix, ratings, sharp, teams, tiers, totals
 
 _STATIC = Path(__file__).resolve().parent / "static"
+
+# Games kicking off within this many hours of a build are the ones the
+# sportsbook coverage gate holds to its floor.
+PRICING_WINDOW_HOURS = 72
 
 _FONTS = (
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -1228,9 +1232,19 @@ def build(*, season: int, week: int, out: Path) -> Path:
                  if status.get("age_seconds") is not None]
     odds_status = oddsapi.status_report()
     matched_on_slate = sum(row.forecast.book_name is not None for row in rows)
+    # DraftKings prices the weekend slate days after the board rolls to it on
+    # Sunday. Coverage of games still most of a week out says nothing about the
+    # feed, so the release gate measures coverage on the games inside this
+    # window (every game kicking off before its end, played ones included).
+    near_cutoff = generated_at + timedelta(hours=PRICING_WINDOW_HOURS)
+    near_rows = [row for row in rows
+                 if row.kickoff_utc is None or row.kickoff_utc <= near_cutoff]
     odds_status.update({
         "slate_matched": matched_on_slate,
         "slate_games": len(rows),
+        "window_hours": PRICING_WINDOW_HOURS,
+        "window_matched": sum(row.forecast.book_name is not None for row in near_rows),
+        "window_games": len(near_rows),
     })
     issues: list[str] = []
     if stale:
