@@ -20,6 +20,21 @@ def verify(path: Path) -> list[str]:
     matched = int(odds.get("slate_matched") or 0)
     if slate <= 0:
         errors.append("current week contains no FBS-vs-FBS games")
+    # The board rolls to the next week on Sunday, days before DraftKings prices
+    # the weekend. Holding the whole slate to the floor then refused every
+    # Sunday and Monday build, so the public board (and the site's CFB desk,
+    # which reads it) sat on the week already played until Tuesday. Coverage is
+    # held to the floor on games kicking off inside the pricing window; with
+    # none inside it the lines are not due yet.
+    if "window_games" in odds:
+        slate = int(odds.get("window_games") or 0)
+        matched = int(odds.get("window_matched") or 0)
+        if not slate and int(odds.get("slate_games") or 0):
+            print(
+                f"[WARN] no game kicks off within {odds.get('window_hours')}h; "
+                f"{odds.get('slate_matched')}/{odds.get('slate_games')} "
+                "DraftKings lines posted so far"
+            )
     if slate and matched <= 0:
         errors.append("no configured-sportsbook lines matched the slate")
     minimum = float(os.getenv("CFB_MIN_BOOK_COVERAGE", "0.50"))
@@ -86,6 +101,7 @@ def main() -> int:
         f"feed_events={odds.get('events')} feed_matched={odds.get('matched')} "
         f"feed_unmatched={odds.get('unmatched')} "
         f"slate={odds.get('slate_matched')}/{odds.get('slate_games')} "
+        f"window={odds.get('window_matched')}/{odds.get('window_games')} "
         f"credits_remaining={odds.get('remaining')}"
     )
     if errors:
