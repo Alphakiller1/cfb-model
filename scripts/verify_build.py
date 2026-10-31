@@ -64,27 +64,17 @@ def verify(path: Path) -> list[str]:
         stale = [row["path"] for row in payload.get("cfbd", []) if row.get("stale")]
         failed = [row["path"] for row in payload.get("cfbd", [])
                   if row.get("state") == "error"]
-        # A spent call allowance is a disclosed outage that lasts until the
-        # provider resets it -- weeks, not minutes. Refusing to publish through
-        # it is what left the 2026 board sitting on a week that had already
-        # been played while the live market, the slate and the ratings were all
-        # sound. The checks above still gate the things that make a board
-        # wrong: an empty slate, a missing or thin sportsbook, a stale quote.
-        # Staleness that the page itself discloses is reported, not fatal.
-        if payload.get("cfbd_quota_spent"):
-            for note in ([f"{len(stale)} CFBD endpoint(s) stale"] if stale else []) + (
-                [f"{len(failed)} CFBD endpoint(s) unavailable: {', '.join(failed)}"]
-                if failed else []
-            ):
-                print(f"[WARN] {note} (provider call allowance spent; board "
-                      "published from last-good data and marked degraded)")
-        else:
-            if stale:
-                errors.append(f"{len(stale)} CFBD endpoint(s) are stale")
-            if failed:
-                errors.append(
-                    f"{len(failed)} CFBD endpoint(s) failed: {', '.join(failed)}"
-                )
+        # A spent allowance is still an outage. Publishing a board with
+        # last-good inputs can make old ratings, schedules, availability, and
+        # matchup stats look current. Accuracy takes precedence over keeping a
+        # stale board online, so every stale or failed current-season endpoint
+        # blocks publication regardless of quota state.
+        if stale:
+            errors.append(f"{len(stale)} CFBD endpoint(s) are stale")
+        if failed:
+            errors.append(
+                f"{len(failed)} CFBD endpoint(s) failed: {', '.join(failed)}"
+            )
     return errors
 
 

@@ -33,15 +33,11 @@ def test_stale_sources_block_a_release_by_default(tmp_path):
     assert any("failed" in e for e in errors)
 
 
-def test_a_spent_allowance_publishes_a_disclosed_degraded_board(tmp_path):
-    """The outage lasts until the provider resets the allowance.
-
-    Refusing to publish through it is what pinned the 2026 board to a week that
-    had already been played, while the slate, ratings and live market were all
-    sound.
-    """
+def test_a_spent_allowance_still_blocks_stale_sources(tmp_path):
+    """A quota outage must not make old CFB inputs look current."""
     errors = verify(_write(tmp_path, _manifest(cfbd_quota_spent=True)))
-    assert errors == []
+    assert any("stale" in e for e in errors)
+    assert any("failed" in e for e in errors)
 
 
 def test_a_spent_allowance_still_blocks_an_unsound_board(tmp_path):
@@ -88,8 +84,8 @@ def test_games_inside_the_window_are_still_held_to_the_floor(tmp_path):
     assert verify(_write(tmp_path, no_games))
 
 
-def test_spent_allowance_ships_a_thin_but_usable_book(tmp_path):
+def test_spent_allowance_does_not_bypass_cfbd_freshness(tmp_path):
     usable = _manifest(cfbd_quota_spent=True)
     usable["odds"] = {"slate_games": 57, "slate_matched": 24,
                       "requested_book": "draftkings", "state": "fresh"}
-    assert verify(_write(tmp_path, usable)) == []
+    assert any("stale" in e for e in verify(_write(tmp_path, usable)))

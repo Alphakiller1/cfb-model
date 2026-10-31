@@ -210,5 +210,5 @@ from these weeks is authorized as an edge.
 ## Tests
 
 ```bash
-python -m pytest -q     # 195 passed
+python -m pytest -q     # current suite
 ```
