@@ -1347,6 +1347,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
             season_games=season_games,
             venue_ctx=venues,
             generated_at=generated_at,
+            fbs=({g.home for g in current_games if g.home_is_fbs}
+                 | {g.away for g in current_games if g.away_is_fbs}) or None,
         ),
         out.parent / "slate.json",
     )

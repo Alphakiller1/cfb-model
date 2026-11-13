@@ -83,3 +83,13 @@ def test_form_ranks_are_places_among_fbs_only():
     home, away = game["home_form"]["rates"]["off_ppa"], game["away_form"]["rates"]["off_ppa"]
     assert (home["rank"], home["of"]) == (1, 3)
     assert (away["rank"], away["of"]) == (3, 3), "below every FBS school, still within the scale"
+
+
+def test_both_slate_writers_pass_the_fbs_cohort():
+    # The production build (site.py) writes the published slate.json; the CLI
+    # export writes the same file. Both must rank among FBS only.
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "src" / "cfbmodel"
+    for name in ("site.py", "cli.py"):
+        text = (root / name).read_text(encoding="utf-8")
+        assert "fbs=({g.home for g in current_games if g.home_is_fbs}" in text, name
