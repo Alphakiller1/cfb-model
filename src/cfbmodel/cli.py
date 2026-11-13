@@ -399,6 +399,8 @@ def cmd_export(args: argparse.Namespace) -> int:
             forms=forms,
             season_games=slate,
             venue_ctx=venues,
+            fbs=({g.home for g in current_games if g.home_is_fbs}
+                 | {g.away for g in current_games if g.away_is_fbs}) or None,
         ),
         out.parent / "slate.json",
     )

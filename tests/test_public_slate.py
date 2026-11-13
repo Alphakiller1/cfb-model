@@ -64,3 +64,22 @@ def test_public_slate_omits_incomplete_form():
     game = payload["games"][0]
     assert "home_form" not in game
     assert "away_form" not in game
+
+
+def test_form_ranks_are_places_among_fbs_only():
+    # Owner 2026-11-13: no rank past the number of teams in the cohort. FCS
+    # schools stay out of the pool; an FCS opponent is placed on the FBS scale.
+    forms = {"Home U": _form(0.3), "Away U": _form(0.1), "Other U": _form(0.2),
+             "FCS A": _form(0.5), "FCS B": _form(-0.4)}
+    payload = export.public_slate(
+        season=2026, week=4,
+        slate_games=[{"homeTeam": "Home U", "awayTeam": "FCS B", "completed": False,
+                      "neutralSite": False, "venueId": 1}],
+        forecasts=[(_forecast(away="FCS B"), None)],
+        forms=forms,
+        fbs={"Home U", "Away U", "Other U"},
+    )
+    game = payload["games"][0]
+    home, away = game["home_form"]["rates"]["off_ppa"], game["away_form"]["rates"]["off_ppa"]
+    assert (home["rank"], home["of"]) == (1, 3)
+    assert (away["rank"], away["of"]) == (3, 3), "below every FBS school, still within the scale"

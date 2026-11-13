@@ -238,7 +238,8 @@ def _form_rates(form: Any, pools: dict[str, list[float]]) -> dict[str, Any] | No
             "label": label,
             "value": round(number, 4),
             "better": better,
-            "rank": _rank(pool, number, better),
+            # An FCS opponent is placed on the FBS scale, never past its end.
+            "rank": min(_rank(pool, number, better), len(pool)),
             "of": len(pool),
             "format": fmt,
         }
@@ -343,11 +344,20 @@ def public_slate(
     season_games: list[dict[str, Any]] | None = None,
     venue_ctx: Any = None,
     generated_at: datetime | None = None,
+    fbs: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Allowlisted public matchup payload. Never carries a priced or forecast field."""
+    """Allowlisted public matchup payload. Never carries a priced or forecast field.
+
+    Form ranks are places among FBS schools when ``fbs`` is given: the site
+    ranks every CFB figure of the FBS cohort, and a pool that also held FCS
+    schools printed places such as "230th of 304" (owner 2026-11-13: no rank
+    past the number of teams in the cohort).
+    """
     stamp = (generated_at or datetime.now(timezone.utc)).replace(microsecond=0)
     pools: dict[str, list[float]] = {field: [] for field, *_ in _PUBLIC_FORM_FIELDS}
-    for form in forms.values():
+    for team, form in forms.items():
+        if fbs and team not in fbs:
+            continue
         for field, *_ in _PUBLIC_FORM_FIELDS:
             value = getattr(form, field, None)
             if value is not None:
