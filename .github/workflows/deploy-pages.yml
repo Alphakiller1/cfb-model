@@ -115,6 +115,13 @@ jobs:
           mkdir -p _site
           tar -xf _prebuilt/artifact.tar -C _site
 
+      - name: Archive every projection and update the wager record
+        run: >-
+          python scripts/track_projections.py --sport cfb
+          --board _site/board.json --out _site/tracking
+          --producer-revision ${{ github.sha }}
+          --recover-url https://alphakiller1.github.io/cfb-model/tracking/manifest.json
+
       - name: Post-build smoke
         run: |
           python scripts/smoke_site.py _site/index.html
@@ -135,6 +142,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+          retention-days: 31
 
   deploy:
     if: github.ref == 'refs/heads/main'

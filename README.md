@@ -212,3 +212,7 @@ from these weeks is authorized as an edge.
 ```bash
 python -m pytest -q     # current suite
 ```
+
+## Live projection tracking
+
+The [weekly record and CLV](https://alphakiller1.github.io/cfb-model/tracking/) retains every game and player projection, with an uncapped wager record and a frozen weekly top-20 view. See [the tracking contract](docs/PROJECTION_TRACKING.md).
