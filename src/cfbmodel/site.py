@@ -812,6 +812,7 @@ def _conference_table(rows, rating_table=None, conference_of=None) -> str:
     members = "".join(
         _conference_members(row.name, rating_table, conference_of) for row in rows
     )
+    table = '<div class="rt-wrap" tabindex="0" role="region" aria-label="Conference ratings">' + table + '</div>'
     return table + f'<div class="cm-wrap">{members}</div>' if members else table
 
 
