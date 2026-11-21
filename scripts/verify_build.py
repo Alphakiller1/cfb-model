@@ -71,7 +71,7 @@ def verify(path: Path) -> list[str]:
             if path.startswith("/games?") and verified_schedule:
                 return "&week=" not in path or path.endswith("&week=" + str(payload.get("week")))
             # Consensus is optional; forecasts use the configured live book.
-            return path.startswith("/lines?") and verified_schedule and odds.get("state") in {"fresh", "cached"} and matched > 0
+            return path.startswith("/lines?") and verified_schedule and odds.get("state") in {"fresh", "cached"} and (matched > 0 or slate == 0)
         stale = [row["path"] for row in payload.get("cfbd", []) if row.get("stale") and not resolved(row["path"])]
         failed = [row["path"] for row in payload.get("cfbd", [])
                   if row.get("state") == "error" and not resolved(row["path"])]

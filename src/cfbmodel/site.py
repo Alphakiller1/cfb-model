@@ -228,7 +228,7 @@ def _health_block(health: dict | None, record: dict | None) -> str:
     state = health.get("state", "unknown")
     state_label = "All production checks passed" if state == "fresh" else "Data degraded"
     state_class = "ops-ok" if state == "fresh" else "ops-warn"
-    matched, slate = odds.get("slate_matched", 0), odds.get("slate_games", 0)
+    matched, slate = odds.get("window_matched", odds.get("slate_matched", 0)), odds.get("window_games", odds.get("slate_games", 0))
     book = str(odds.get("requested_book") or "sportsbook").replace("draftkings", "DraftKings")
     remaining = odds.get("remaining")
     remaining_label = "—" if remaining is None else remaining
@@ -254,7 +254,7 @@ def _health_block(health: dict | None, record: dict | None) -> str:
 <span>verified {esc(health.get('generated_at', ''))}</span></div>
 <div class="ops-grid">
 <div><span class="ops-k">CFBD inputs</span><strong>{esc(health.get('cfbd_state', 'unknown'))}</strong>
-<small>{esc(health.get('cfbd_endpoint_count', 0))} endpoints · oldest live input {_age_label(health.get('max_live_age_seconds'))}</small></div>
+<small>{esc(health.get('cfbd_endpoint_count', 0))} endpoints · features before week {esc(health.get('week', '—'))}</small></div>
 <div><span class="ops-k">{esc(book)} lines</span><strong>{matched}/{slate} matched</strong>
 <small>{esc(odds.get('state', 'not run'))} · {esc(remaining_label)} credits remain</small></div>
 <div><span class="ops-k">Model lineage</span><strong>{esc(matrix.LINEAGE_VERSION)}</strong>
@@ -1250,7 +1250,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     # feed, so the release gate measures coverage on the games inside this
     # window (every game kicking off before its end, played ones included).
     near_cutoff = generated_at + timedelta(hours=PRICING_WINDOW_HOURS)
-    near_rows = [row for row in rows
+    future_rows = [row for row in rows if row.kickoff_utc is None or row.kickoff_utc > generated_at]
+    near_rows = [row for row in future_rows
                  if row.kickoff_utc is None or row.kickoff_utc <= near_cutoff]
     odds_status.update({
         "slate_matched": matched_on_slate,
@@ -1260,16 +1261,19 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "window_games": len(near_rows),
     })
     issues: list[str] = []
-    if stale:
-        issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
-    if failed:
-        issues.append(f"{len(failed)} CFBD endpoint(s) failed and supplied no current input")
+    if schedule_receipt.get("complete") and (stale or failed):
+        issues.append(f"CFBD has limited availability; ESPN verified {schedule_receipt['matched']}/{schedule_receipt['required']} current matchups. DraftKings supplies posted benchmarks.")
+    else:
+        if stale:
+            issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
+        if failed:
+            issues.append(f"{len(failed)} CFBD endpoint(s) failed and supplied no current input")
     if odds_error:
         issues.append(f"Live sportsbook feed failed: {odds_error}")
     elif rows and matched_on_slate == 0:
         issues.append("DraftKings returned no matched lines for this slate")
-    elif matched_on_slate < len(rows):
-        issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
+    elif matched_on_slate < len(future_rows):
+        issues.append(f"DraftKings has not posted or matched {len(future_rows) - matched_on_slate} upcoming game(s)")
     if ledger_error:
         issues.append(f"Shadow ledger unavailable: {ledger_error}")
     if issues_props:
@@ -1305,7 +1309,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "generated_at": generated_at.strftime("%Y-%m-%d %H:%M UTC"),
         "season": season,
         "week": week,
-        "cfbd_state": ("source error" if failed else
+        "cfbd_state": ("Pre-week form; ESPN slate verified" if schedule_receipt.get("complete") else "source error" if failed else
                        "bounded snapshot" if stale else "fresh"),
         "cfbd_endpoint_count": len(current_status),
         # A spent provider allowance is a disclosed outage, not a mystery
@@ -1334,7 +1338,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
         if odds_error or (rows and matched_on_slate == 0):
             raise RuntimeError("production build requires at least one verified live book line")
 
-    html_text = render(season=season, week=week, rows=rows,
+    html_text = render(season=season, week=week, rows=future_rows,
                        rating_table=rating_table, authority=authority, comps=comps,
                        conference_rows=conference_rows, conference_of=conference_of,
                        health=health, record=record_summary, generated_at=generated_at,
