@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from cfbmodel import authority, forecast, ledger, player_props as pp
 from cfbmodel.sources import availability as av
 from cfbmodel.sources.espn_box import GameBox, PlayerLine, TeamGame
@@ -139,12 +141,34 @@ def test_ruled_out_back_redistributes_carries_and_questionable_stays_flagged():
         report=_report(**{"Lead Back": av.DOUBTFUL, "Star Passer": av.QUESTIONABLE}))}
     assert "rb1" not in hurt
     assert hurt["rb2"].metrics["rush_car"] > base["rb2"].metrics["rush_car"]
-    assert hurt["rb2"].metrics["rush_car"] <= base["rb2"].metrics["rush_car"] * pp.MAX_USAGE_SCALE
+    # All vacated backfield carries move to the remaining back; quarterback
+    # work stays in its own pool. The old 1.5x cap left carries unassigned.
+    assert hurt["rb2"].metrics["rush_car"] == pytest.approx(
+        base["rb1"].metrics["rush_car"] + base["rb2"].metrics["rush_car"])
+    assert hurt["qb1"].metrics.get("rush_car") == base["qb1"].metrics.get("rush_car")
+    assert hurt["rb2"].metrics["rush_yds"] / hurt["rb2"].metrics["rush_car"] == pytest.approx(
+        base["rb2"].metrics["rush_yds"] / base["rb2"].metrics["rush_car"])
     assert hurt["qb1"].availability == av.QUESTIONABLE
 
 
 def test_usual_starter_ignores_the_report():
     assert pp.usual_starter(_hist(), "1", 2026, 5) == ("qb1", "Star Passer")
+
+
+def test_first_half_qbs_split_volume_and_receivers_follow_replacement():
+    lineup = [("qb1", "Star Passer", STARTER), ("qb2", "Backup Kid", BACKUP),
+              ("rb1", "Lead Back", RB1), ("wr", "Receiver", {"rec": 10, "rec_yds": 130})]
+    hist = pp.History([_box(f"e{w}", w, lineup) for w in (1, 2, 3, 4)])
+    base = {p.athlete_id: p for p in pp.project_team(hist, "1", "2", 2026, 5, ENV)}
+    half = {p.athlete_id: p for p in pp.project_team(hist, "1", "2", 2026, 5, ENV,
+                   report=_report(**{"Star Passer": av.OUT_FIRST_HALF}))}
+    assert {"qb1", "qb2"} <= half.keys()
+    assert sum(half[q].metrics["pass_att"] for q in ("qb1", "qb2")) <= base["qb1"].metrics["pass_att"] * 1.05
+    assert half["qb1"].metrics["pass_att"] == pytest.approx(base["qb1"].metrics["pass_att"] / 2)
+    assert half["wr"].metrics["rec_yds"] < base["wr"].metrics["rec_yds"]
+    for p in half.values():
+        for stat, c in p.forecast_components.items():
+            assert c["historical_role"] + c["pool_normalization"] + c["availability_and_role_change"] == pytest.approx(p.metrics[stat])
 
 
 # -- edge withholding -----------------------------------------------------------

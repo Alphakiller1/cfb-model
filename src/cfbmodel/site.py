@@ -164,6 +164,8 @@ def _nav(season: int, week: int) -> str:
 <a class="nav-link" href="#best-bets">Best Bets</a>
 <a class="nav-link" href="#sharp">Sharp Money</a>
 <a class="nav-link" href="#board">Board</a>
+<a class="nav-link" href="props/">Player Props</a>
+<a class="nav-link" href="results/">Graded Results</a>
 <a class="nav-link" href="#ratings">Power Ratings</a>
 <a class="nav-link" href="#conferences">Conferences</a>
 <a class="nav-link" href="#method">Methodology</a>
@@ -226,7 +228,7 @@ def _health_block(health: dict | None, record: dict | None) -> str:
     state = health.get("state", "unknown")
     state_label = "All production checks passed" if state == "fresh" else "Data degraded"
     state_class = "ops-ok" if state == "fresh" else "ops-warn"
-    matched, slate = odds.get("slate_matched", 0), odds.get("slate_games", 0)
+    matched, slate = odds.get("window_matched", odds.get("slate_matched", 0)), odds.get("window_games", odds.get("slate_games", 0))
     book = str(odds.get("requested_book") or "sportsbook").replace("draftkings", "DraftKings")
     remaining = odds.get("remaining")
     remaining_label = "—" if remaining is None else remaining
@@ -252,7 +254,7 @@ def _health_block(health: dict | None, record: dict | None) -> str:
 <span>verified {esc(health.get('generated_at', ''))}</span></div>
 <div class="ops-grid">
 <div><span class="ops-k">CFBD inputs</span><strong>{esc(health.get('cfbd_state', 'unknown'))}</strong>
-<small>{esc(health.get('cfbd_endpoint_count', 0))} endpoints · oldest live input {_age_label(health.get('max_live_age_seconds'))}</small></div>
+<small>{esc(health.get('cfbd_endpoint_count', 0))} endpoints · features before week {esc(health.get('week', '—'))}</small></div>
 <div><span class="ops-k">{esc(book)} lines</span><strong>{matched}/{slate} matched</strong>
 <small>{esc(odds.get('state', 'not run'))} · {esc(remaining_label)} credits remain</small></div>
 <div><span class="ops-k">Model lineage</span><strong>{esc(matrix.LINEAGE_VERSION)}</strong>
@@ -988,6 +990,7 @@ def render(*, season: int, week: int, rows: list[Row], rating_table: dict[str, f
 <section class="hero" style="margin-top:0">
 <span class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>CHASE ANALYTICS MODEL LAB</span>
 <h1 class="hero-title">College Football Model</h1>
+<nav class="model-review-links" aria-label="Model results and projections"><a href="props/">Player prop matrix</a><a href="results/">Graded predictions &amp; projections</a><a href="tracking/">Weekly record &amp; CLV</a></nav>
 <p class="hero-sub">A point-in-time CFB forecasting system that publishes its own
 spread and total against verified DraftKings quotes, with opponent-adjusted team
 strength, early-season reliability weighting, and a timestamped shadow record.</p>
@@ -1036,6 +1039,7 @@ than the ordering inside it.</p>
 <section id="method">
 <div class="sec-eyebrow">04 · Method</div>
 <h2 class="sec-title">Methodology</h2>
+<p class="sec-blurb">2026 season audit: 414 games, with 241 later-week validation games. Tested matrix reweights worsened validation and were rejected. Player revision 2.0 normalizes role pools, redistributes absent players&rsquo; work, and publishes fitted outcome ranges and availability assumptions. <a href="audit/">Read the revision evidence</a>.</p>
 <p class="sec-blurb">Every constant below was measured on 3,256 out-of-sample games rather
 than assumed. Full evidence lives in <code>reports/BASELINE_2019_2025.md</code>.</p>
 {_methodology()}
@@ -1062,14 +1066,14 @@ def build(*, season: int, week: int, out: Path) -> Path:
     teams.load.cache_clear()
     authority = auth_mod.current()
     rating_bundle = cli.build_rating_bundle(
-        season, week, include_scored_this_week=True,
+        season, week, include_scored_this_week=False,
     )
     rating_table = rating_bundle.table
     comps = rating_bundle.components
-    forms = cli._forms(season, week, include_scored_this_week=True)
+    forms = cli._forms(season, week, include_scored_this_week=False)
     preseason_totals = cli._preseason_totals(season)
     current_games = cli._current_season_games(
-        season, week, include_scored_this_week=True,
+        season, week, include_scored_this_week=False,
     )
     market_rows = cli.consensus_lines(season, week)
     market, market_total = cli._markets(market_rows)
@@ -1079,6 +1083,11 @@ def build(*, season: int, week: int, out: Path) -> Path:
     season_games: list[dict] = []
     for game_week in range(1, week + 1):
         season_games.extend(cli.cfbd.games(season, week=game_week))
+    from .sources import espn_schedule
+    try:
+        season_games, schedule_receipt = espn_schedule.refresh(season_games, season, week)
+    except Exception as exc:
+        schedule_receipt = {"source": "ESPN", "complete": False, "error": type(exc).__name__}
     venues = cli._venue_context(season, season_games)
 
     # A missing quote is an explicit source state, not an empty dictionary that
@@ -1181,6 +1190,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         issues_props = f"{type(exc).__name__}: {exc}"
     else:
         issues_props = None
+    from . import props_view
+    props_view.attach_quotes(player_payload[0], prop_quotes)
     try:
         picks = best_bets.build(
             rows, season=season, week=week, forms=forms, team_status=team_status,
@@ -1222,6 +1233,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         record_summary = ledger_payload.get("summary", {})
     except Exception as exc:
         ledger_error = f"{type(exc).__name__}: {exc}"
+        ledger_payload = ledger._load(ledger.DEFAULT_PATH)
+        record_summary = ledger.summary(ledger_payload, season=season)
 
     endpoint_status = cfbd.status_report()
     current_status = [status for status in endpoint_status
@@ -1237,7 +1250,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
     # feed, so the release gate measures coverage on the games inside this
     # window (every game kicking off before its end, played ones included).
     near_cutoff = generated_at + timedelta(hours=PRICING_WINDOW_HOURS)
-    near_rows = [row for row in rows
+    future_rows = [row for row in rows if row.kickoff_utc is None or row.kickoff_utc > generated_at]
+    near_rows = [row for row in future_rows
                  if row.kickoff_utc is None or row.kickoff_utc <= near_cutoff]
     odds_status.update({
         "slate_matched": matched_on_slate,
@@ -1247,16 +1261,19 @@ def build(*, season: int, week: int, out: Path) -> Path:
         "window_games": len(near_rows),
     })
     issues: list[str] = []
-    if stale:
-        issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
-    if failed:
-        issues.append(f"{len(failed)} CFBD endpoint(s) failed and supplied no current input")
+    if schedule_receipt.get("complete") and (stale or failed):
+        issues.append(f"CFBD has limited availability; ESPN verified {schedule_receipt['matched']}/{schedule_receipt['required']} current matchups. DraftKings supplies posted benchmarks.")
+    else:
+        if stale:
+            issues.append(f"{len(stale)} CFBD endpoint(s) served a bounded last-good snapshot")
+        if failed:
+            issues.append(f"{len(failed)} CFBD endpoint(s) failed and supplied no current input")
     if odds_error:
         issues.append(f"Live sportsbook feed failed: {odds_error}")
     elif rows and matched_on_slate == 0:
         issues.append("DraftKings returned no matched lines for this slate")
-    elif matched_on_slate < len(rows):
-        issues.append(f"DraftKings has not posted or matched {len(rows) - matched_on_slate} game(s)")
+    elif matched_on_slate < len(future_rows):
+        issues.append(f"DraftKings has not posted or matched {len(future_rows) - matched_on_slate} upcoming game(s)")
     if ledger_error:
         issues.append(f"Shadow ledger unavailable: {ledger_error}")
     if issues_props:
@@ -1286,11 +1303,13 @@ def build(*, season: int, week: int, out: Path) -> Path:
                 )
 
     health = {
+        "schedule_verification": schedule_receipt,
+        "feature_cutoff": {"season": season, "before_week": week},
         "state": "fresh" if not issues else "degraded",
         "generated_at": generated_at.strftime("%Y-%m-%d %H:%M UTC"),
         "season": season,
         "week": week,
-        "cfbd_state": ("source error" if failed else
+        "cfbd_state": ("Pre-week form; ESPN slate verified" if schedule_receipt.get("complete") else "source error" if failed else
                        "bounded snapshot" if stale else "fresh"),
         "cfbd_endpoint_count": len(current_status),
         # A spent provider allowance is a disclosed outage, not a mystery
@@ -1319,7 +1338,7 @@ def build(*, season: int, week: int, out: Path) -> Path:
         if odds_error or (rows and matched_on_slate == 0):
             raise RuntimeError("production build requires at least one verified live book line")
 
-    html_text = render(season=season, week=week, rows=rows,
+    html_text = render(season=season, week=week, rows=future_rows,
                        rating_table=rating_table, authority=authority, comps=comps,
                        conference_rows=conference_rows, conference_of=conference_of,
                        health=health, record=record_summary, generated_at=generated_at,
@@ -1352,6 +1371,20 @@ def build(*, season: int, week: int, out: Path) -> Path:
         ),
         out.parent / "slate.json",
     )
+    props_view.publish(player_payload[0], player_payload[1], out.parent, season=season,
+                       week=week, generated_at=generated_at.isoformat())
+    audit_dir = out.parent / "audit"
+    audit_dir.mkdir(exist_ok=True)
+    report_dir = Path(__file__).resolve().parents[2] / "reports"
+    audit_text = (report_dir / "CFB_2026_REVISION_2026-11-21.md").read_text(encoding="utf-8")
+    (audit_dir / "evidence.json").write_text((report_dir / "CFB_2026_REVISION.json").read_text(encoding="utf-8"), encoding="utf-8")
+    (audit_dir / "index.html").write_text('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1"><title>CFB revision evidence</title>'
+        + _FONTS + '<style>' + _css() + 'pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}'
+        '</style></head><body><main class="wrap"><p><a href="../">CFB model</a> · '
+        '<a href="../props/">Player matrix</a> · <a href="../results/">Graded results</a> · '
+        '<a href="evidence.json">Aggregate evidence JSON</a></p><pre>' + html.escape(audit_text)
+        + '</pre></main></body></html>', encoding="utf-8")
     (out.parent / "build.json").write_text(
         json.dumps(health, indent=2) + "\n", encoding="utf-8"
     )
@@ -1359,6 +1392,8 @@ def build(*, season: int, week: int, out: Path) -> Path:
         json.dumps(record_summary, indent=2) + "\n", encoding="utf-8"
     )
     if ledger_payload is not None:
+        from . import results_view
+        results_view.publish(ledger_payload, out.parent, season=season)
         # The published copy is the durable one: CI restores from it when the
         # Actions cache has been evicted, so the record never silently restarts.
         (out.parent / "plays.json").write_text(
