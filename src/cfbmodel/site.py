@@ -807,12 +807,12 @@ def _conference_table(rows, rating_table=None, conference_of=None) -> str:
         '<th class="r">Depth</th><th class="r">x-conf</th><th>Best</th>'
         f'</tr></thead><tbody>{body}</tbody></table>'
     )
+    table = '<div class="rt-wrap" tabindex="0" role="region" aria-label="Conference ratings">' + table + '</div>'
     if not (rating_table and conference_of):
         return table
     members = "".join(
         _conference_members(row.name, rating_table, conference_of) for row in rows
     )
-    table = '<div class="rt-wrap" tabindex="0" role="region" aria-label="Conference ratings">' + table + '</div>'
     return table + f'<div class="cm-wrap">{members}</div>' if members else table
 
 
