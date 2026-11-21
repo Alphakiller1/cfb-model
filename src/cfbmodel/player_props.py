@@ -14,9 +14,10 @@ Two stages, the same shape as nfl-model's player layer:
 
 2. **Player share.** Each player's recency-weighted share of his team's
    attempts, completions, carries, yards and touchdowns, over the games he
-   played. A player projects only if he played in his team's most recent game:
-   college football has no injury report worth the name, and the last box score
-   is the most reliable availability signal there is.
+   played, normalized to team opportunity pools. Current conference availability
+   reports remove absent players and redistribute their work within position.
+   Each half is allocated separately for a first-half absence. Recent box scores
+   establish roles; missing current depth evidence remains an uncertainty.
 
 Box scores come from ESPN (``sources/espn_box``), so the layer keeps working
 when the CFBD allowance is spent. Rushing follows NCAA scoring (sacks count as
@@ -30,12 +31,32 @@ small has a much wider relative spread than one whose projection is large.
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+from datetime import datetime, timezone
 
 from .sources.espn_box import GameBox, PlayerLine
 
-MODEL_VERSION = "cfb-player-projections/1.0.0"
+MODEL_VERSION = "cfb-player-projections/2.0.0"
+
+
+@lru_cache(maxsize=1)
+def outcome_parameters() -> dict:
+    data = json.loads(Path(__file__).with_name("prop_parameters.json").read_text(encoding="utf-8"))
+    if data["projection_version"] != MODEL_VERSION or data["fit_season_max"] >= 2026:
+        raise ValueError("Player outcome parameter lineage is invalid")
+    return data
+
+
+def parameter_receipt() -> dict:
+    data = outcome_parameters()
+    digest = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {"version": data["version"], "sha256": digest,
+            "fit_seasons": data["fit_seasons"], "held_out_season": data["held_out_season"]}
 
 TEAM_STATS = ("pass_att", "pass_cmp", "pass_yds", "pass_td", "pass_int",
               "rush_car", "rush_yds", "rush_td")
@@ -158,6 +179,9 @@ class PlayerProjection:
     usage: dict[str, float] = field(default_factory=dict)
     # Teammates listed out whose usage this player inherits this week.
     absorbs: tuple[str, ...] = ()
+    profile: dict = field(default_factory=dict)
+    predictability: dict = field(default_factory=dict)
+    forecast_components: dict = field(default_factory=dict)
 
 
 def team_totals(box: GameBox, team_id: str) -> dict[str, float]:
@@ -330,12 +354,6 @@ def _passer(shares: dict, eligible: set[str]) -> str | None:
     return qbs[0] if qbs else None
 
 
-# Usage a ruled-out player carried flows to the teammates still available, but a
-# team that loses most of its backfield does not get one back three times over.
-MAX_USAGE_SCALE = 1.5
-_REDISTRIBUTED = ("rush_car", "rush_yds", "rush_td", "rec", "rec_yds", "rec_td")
-
-
 def usual_starter(hist: History, team_id: str, season: int, week: int
                   ) -> tuple[str, str] | None:
     """(athlete_id, name) of the quarterback the box scores say has been starting."""
@@ -344,63 +362,88 @@ def usual_starter(hist: History, team_id: str, season: int, week: int
     return (aid, info[aid]["name"]) if aid else None
 
 
+def _passing_metrics(team: dict, share: dict, exposure: float) -> tuple[dict, float]:
+    att_share = min(1.0, max(share["pass_att"], QB_ATTEMPT_FLOOR)) * exposure
+    scale = att_share / share["pass_att"] if share["pass_att"] else 1.0
+    attempts = team["pass_att"] * att_share
+    return {
+        "pass_att": attempts,
+        "pass_cmp": min(attempts, team["pass_cmp"] * min(.99, share["pass_cmp"] * scale)),
+        "pass_yds": team["pass_yds"] * min(.99, share["pass_yds"] * scale),
+        "pass_td": team["pass_td"] * min(.99, share["pass_td"] * scale if share["pass_td"] else att_share),
+        "pass_int": team["pass_int"] * att_share,
+    }, att_share
+
+
 def project_team(hist: History, team_id: str, opponent_id: str, season: int, week: int,
                  env: Environment, positions: dict[str, str] | None = None,
-                 report=None) -> list[PlayerProjection]:
+                 report=None, *, profiles_enabled: bool = True) -> list[PlayerProjection]:
     """``report`` is the team's `availability.TeamReport` for this game, if filed."""
-    from .sources.availability import UNAVAILABLE
+    from . import prop_profiles
 
-    shares, info, eligible = _player_shares(hist, team_id, season, week)
+    raw_shares, info, eligible = _player_shares(hist, team_id, season, week)
     if not eligible:
         return []
-    status_of = ({aid: report.status_of(info[aid]["name"]) for aid in eligible}
+    if report is not None and positions:
+        # A zero-catch box score is not proof of absence. A current roster and
+        # filed report can retain an established role missing from the last box.
+        recent_games = [b for b in hist.before(team_id, season, week) if b.season == season][-3:]
+        counts = defaultdict(lambda: defaultdict(float))
+        for box in recent_games:
+            for player in box.players:
+                if player.team_id == team_id and player.athlete_id in positions:
+                    for field in MIN_ROLE:
+                        counts[player.athlete_id][field] += getattr(player, field)
+        for aid, values in counts.items():
+            if any(values[field] / max(len(recent_games), 1) >= floor for field, floor in MIN_ROLE.items()):
+                eligible.add(aid)
+    position_of = {aid: (positions or {}).get(aid) or _infer_position(info[aid]["lines"])
+                   for aid in info}
+    status_of = ({aid: report.status_of(info[aid]["name"]) for aid in info}
                  if report is not None else {})
-    ruled_out = {aid for aid, status in status_of.items() if status in UNAVAILABLE}
-    if ruled_out:
-        eligible = eligible - ruled_out
-        shares = {aid: dict(values) for aid, values in shares.items()}
-        for stat in _REDISTRIBUTED:
-            lost = sum(shares[aid][stat] for aid in ruled_out)
-            kept = sum(shares[aid][stat] for aid in eligible)
-            if lost > 0 and kept > 0:
-                scale = min(MAX_USAGE_SCALE, (kept + lost) / kept)
-                for aid in eligible:
-                    shares[aid][stat] *= scale
+    shares, neutral_shares, eligible, qb_exposure, absorbs, reserves = prop_profiles.allocate(
+        raw_shares, info, eligible, position_of, status_of)
     team = team_environment(hist, team_id, opponent_id, season, week, env)
+    league = hist.league(season, week)
+    allowed, _ = _team_means(hist, opponent_id, season, week, league, allowed=True)
+    passing = {aid: _passing_metrics(team, shares[aid], exposure)
+               for aid, exposure in qb_exposure.items()}
+    receiving_completions, receiving_yards = team["pass_cmp"], team["pass_yds"]
+    if any(position_of[aid] == "QB" and status in ("out", "doubtful", "out_first_half")
+           for aid, status in status_of.items()):
+        # Receiver volumes share the new quarterback environment. The remaining
+        # unprojected passing share is an explicit team-rate reserve, not a second
+        # full-game quarterback forecast.
+        reserve = max(0, 1 - sum(weight for _, weight in passing.values()))
+        receiving_completions = sum(values["pass_cmp"] for values, _ in passing.values()) + reserve * team["pass_cmp"]
+        receiving_yards = sum(values["pass_yds"] for values, _ in passing.values()) + reserve * team["pass_yds"]
     team_tds = team["pass_td"] + team["rush_td"]
     out: list[PlayerProjection] = []
-    # The passer: whoever threw most among those not ruled out carries the QB
-    # role - so a listed-out starter hands the role to his backup.
-    starter = _passer(shares, eligible)
+    neutral_qbs = {aid for aid in neutral_shares if position_of[aid] == "QB"}
+    neutral_starter = _passer(raw_shares, neutral_qbs)
 
     for aid in eligible:
         share = shares.get(aid)
         if not share:
             continue
-        position = (positions or {}).get(aid) or _infer_position(info[aid]["lines"])
-        if position == "QB" and aid != starter:
+        position = position_of[aid]
+        if position == "QB" and not qb_exposure.get(aid):
             continue
         m: dict[str, float] = {}
-        if aid == starter:
+        if position == "QB":
             # A starter's attempt share is his share in the games he played, not
             # diluted by blowouts where the backup finished - floor it.
-            att_share = max(share["pass_att"], QB_ATTEMPT_FLOOR)
-            scale = att_share / share["pass_att"] if share["pass_att"] else 1.0
-            m["pass_att"] = team["pass_att"] * att_share
-            m["pass_cmp"] = team["pass_cmp"] * min(0.99, share["pass_cmp"] * scale)
-            m["pass_yds"] = team["pass_yds"] * min(0.99, share["pass_yds"] * scale)
-            m["pass_td"] = team["pass_td"] * min(0.99, share["pass_td"] * scale
-                                                 if share["pass_td"] else att_share)
-            m["pass_int"] = team["pass_int"] * att_share
+            values, att_share = passing[aid]
+            m.update(values)
             position = "QB"
         m["rush_car"] = team["rush_car"] * share["rush_car"]
         m["rush_yds"] = team["rush_yds"] * share["rush_yds"]
-        m["rec"] = team["pass_cmp"] * share["rec"]
-        m["rec_yds"] = team["pass_yds"] * share["rec_yds"]
+        m["rec"] = receiving_completions * share["rec"]
+        m["rec_yds"] = receiving_yards * share["rec_yds"]
         if position not in MARKETS:
             continue
         if position == "QB":
-            keep = m.get("pass_att", 0.0) >= MIN_ROLE["pass_att"]
+            keep = m.get("pass_att", 0.0) >= MIN_ROLE["pass_att"] * qb_exposure[aid]
         elif position == "RB":
             keep = m["rush_car"] >= MIN_ROLE["rush_car"] or m["rec"] >= MIN_ROLE["rec"]
         else:
@@ -423,26 +466,63 @@ def project_team(hist: History, team_id: str, opponent_id: str, season: int, wee
         td_share = 0.5 * (share["rush_td"] * team["rush_td"] + share["rec_td"] * team["pass_td"]) \
             / max(team_tds, 1e-9) + 0.5 * touch_share
         lam = team_tds * td_share
-        out.append(PlayerProjection(
+        projection = PlayerProjection(
             team_id=team_id, opponent_id=opponent_id, athlete_id=aid,
             name=info[aid]["name"], position=position, games=info[aid]["games"],
             metrics={k: m[k] for k in MARKETS[position] if k in m},
             anytime_td=1.0 - math.exp(-lam) if lam > 0 else 0.0,
             availability=status_of.get(aid),
             usage={key: round(share[stat], 3) for key, stat in (
-                ("pass_attempts", "pass_att"), ("carries", "rush_car"), ("targets", "rec"))
+                ("pass_attempts", "pass_att"), ("carries", "rush_car"), ("receptions", "rec"))
                 if share.get(stat)},
-            absorbs=tuple(sorted(
-                info[out]["name"] for out in ruled_out
-                if any(shares[out].get(stat, 0.0) > 0.05 and share.get(stat, 0.0) > 0
-                       for stat in _REDISTRIBUTED)
-            )) if ruled_out else (),
-        ))
+            absorbs=tuple(sorted(info[other]["name"] for other in absorbs[aid])),
+        )
+        if position == "QB":
+            projection.usage["pass_attempts"] = round(att_share, 3)
+        if not profiles_enabled:
+            out.append(projection)
+            continue
+        raw = raw_shares[aid]
+        neutral = neutral_shares[aid]
+        historical = {"rush_car": team["rush_car"] * raw["rush_car"],
+                      "rush_yds": team["rush_yds"] * raw["rush_yds"],
+                      "rec": team["pass_cmp"] * raw["rec"],
+                      "rec_yds": team["pass_yds"] * raw["rec_yds"]}
+        pool_only = {}
+        for opportunity, yards in (("rush_car", "rush_yds"), ("rec", "rec_yds")):
+            factor = neutral[opportunity] / raw[opportunity] if raw[opportunity] else 0
+            pool_only[opportunity] = historical[opportunity] * factor
+            pool_only[yards] = historical[yards] * factor
+        if position == "QB":
+            for key in ("pass_att", "pass_cmp", "pass_yds", "pass_td", "pass_int"):
+                historical[key] = team[key] * raw[key]
+                pool_only[key] = m.get(key, 0) / qb_exposure[aid] if aid == neutral_starter else 0
+        detail = prop_profiles.describe(
+            projection, history=hist, info=info, team=team, environment=env, report=report,
+            status_of=status_of, base_metrics=historical, opportunity_metrics=pool_only,
+            team_id=team_id, season=season, week=week,
+            distributions={key: distribution(key, value) for key, value in projection.metrics.items()})
+        projection.profile = detail["profile"]
+        projection.profile["unallocated_opportunity"] = reserves
+        projection.profile["team_context"].update({"receiving_completions_budget": receiving_completions,
+                                                   "receiving_yards_budget": receiving_yards})
+        projection.profile["opponent_tendencies"] = {
+            "rushing_yards_per_carry_allowed": allowed["rush_yds"] / max(allowed["rush_car"], 1),
+            "passing_yards_per_attempt_allowed": allowed["pass_yds"] / max(allowed["pass_att"], 1),
+            "completion_rate_allowed": allowed["pass_cmp"] / max(allowed["pass_att"], 1),
+            "basis": "Shrunk, pre-week box scores; not a future defensive assignment",
+        }
+        projection.predictability = detail["predictability"]
+        projection.forecast_components = detail["forecast_components"]
+        out.append(projection)
     return out
 
 
 # -- distributions ------------------------------------------------------------
 def ratio_quantiles(stat: str, mean: float) -> tuple[float, ...] | None:
+    for bucket in outcome_parameters().get("ratios", {}).get(stat, []):
+        if mean <= bucket["upper"]:
+            return tuple(bucket["quantiles"])
     buckets = RATIO_QUANTILES.get(stat)
     if not buckets:
         return None
@@ -456,7 +536,7 @@ def ratio_quantiles(stat: str, mean: float) -> tuple[float, ...] | None:
 # a ladder interpolates between whole numbers, and on 2025 it put interceptions
 # over 0.5 at 55% against 47% observed. Size 8 was the best-calibrated of
 # Poisson / NB(3) / NB(8) for all three (scripts/fit_player_props.py).
-COUNT_STATS = ("pass_td", "pass_int", "rec")
+COUNT_STATS = ("pass_att", "pass_cmp", "pass_td", "pass_int", "rush_car", "rec")
 COUNT_SIZE = 8.0
 
 
@@ -464,14 +544,17 @@ def _nb_pmf(mean: float, size: float = COUNT_SIZE) -> dict[str, float]:
     p = size / (size + mean)
     pmf: dict[str, float] = {}
     cumulative = 0.0
-    for k in range(0, 40):
+    variance = mean + mean * mean / size
+    limit = max(100, math.ceil(mean + 20 * math.sqrt(variance)))
+    for k in range(limit + 1):
         mass = math.exp(math.lgamma(k + size) - math.lgamma(size) - math.lgamma(k + 1)
                         + size * math.log(p) + k * math.log(1 - p)) if mean > 0 else float(k == 0)
         cumulative += mass
-        if mass >= 5e-4:
-            pmf[str(k)] = round(mass, 4)
-        if cumulative > 0.9995:
+        pmf[str(k)] = mass
+        if cumulative > 1 - 1e-10:
             break
+    total = sum(pmf.values())
+    pmf = {k: v / total for k, v in pmf.items()}
     return pmf
 
 
@@ -489,7 +572,7 @@ def distribution(stat: str, mean: float) -> dict[str, float]:
     else the quantile ladder used to price any line (``q`` at ``q_levels``)."""
     out = {"mean": round(mean, 2)}
     if stat in COUNT_STATS:
-        pmf = _nb_pmf(mean)
+        pmf = _nb_pmf(mean, outcome_parameters()["count_shapes"][stat])
         out.update({"p10": _pmf_quantile(pmf, 0.10), "p50": _pmf_quantile(pmf, 0.50),
                     "p90": _pmf_quantile(pmf, 0.90), "pmf": pmf})
         return out
@@ -559,6 +642,9 @@ def build_slate(season: int, week: int, forecasts: list[tuple],
     status = {"model_version": MODEL_VERSION, "authority": "RESEARCH_ONLY",
               "source": "ESPN box scores", "games": 0, "players": 0, "issues": [],
               "teams": {}}
+    if season <= outcome_parameters()["fit_season_max"]:
+        raise ValueError("Live outcomes require a season after the fitting window")
+    status["outcome_parameters"] = parameter_receipt()
     try:
         events = espn_box.week_events(season, week)
     except Exception as exc:
@@ -577,6 +663,8 @@ def build_slate(season: int, week: int, forecasts: list[tuple],
 
     out: list[dict] = []
     for forecast, kickoff in forecasts:
+        if kickoff is not None and kickoff <= datetime.now(timezone.utc):
+            continue  # historical projections are reviewed from the frozen ledger
         ids = by_pair.get((normalise(forecast.home), normalise(forecast.away)))
         if ids is None:
             status["issues"].append(f"no ESPN event for {forecast.away} at {forecast.home}")
@@ -618,11 +706,16 @@ def build_slate(season: int, week: int, forecasts: list[tuple],
                     "stats": {k: distribution(k, v) for k, v in proj.metrics.items()},
                     "anytime_td": round(proj.anytime_td, 3) if proj.anytime_td is not None else None,
                     "availability": proj.availability,
+                    "injury_status": proj.availability,
                     "usage": proj.usage,
                     "absorbs": list(proj.absorbs),
+                    "profile": proj.profile,
+                    "predictability": proj.predictability,
+                    "forecast_components": proj.forecast_components,
                     "team_implied_points": round((env.total + env.margin) / 2.0, 1),
                     "team_margin": round(env.margin, 1),
                     "model_version": MODEL_VERSION,
+                    "outcome_parameters": parameter_receipt(),
                 })
     status["players"] = len(out)
     return out, status

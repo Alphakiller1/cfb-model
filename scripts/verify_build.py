@@ -61,9 +61,20 @@ def verify(path: Path) -> list[str]:
         errors.append(f"sportsbook source state is {odds.get('state')!r}")
 
     if os.getenv("CFB_REQUIRE_FRESH_CFBD", "1").lower() in {"1", "true", "yes"}:
-        stale = [row["path"] for row in payload.get("cfbd", []) if row.get("stale")]
+        check = payload.get("schedule_verification") or {}
+        verified_schedule = (check.get("complete") is True and check.get("season") == payload.get("season")
+                             and check.get("week") == payload.get("week") and check.get("required", 0) > 0
+                             and check.get("matched") == check.get("required"))
+        def resolved(path: str) -> bool:
+            # The current scoreboard verifies every FBS matchup's kickoff and
+            # final score; pre-week rating inputs remain independently checked.
+            if path.startswith("/games?") and verified_schedule:
+                return "&week=" not in path or path.endswith("&week=" + str(payload.get("week")))
+            # Consensus is optional; forecasts use the configured live book.
+            return path.startswith("/lines?") and verified_schedule and odds.get("state") in {"fresh", "cached"} and matched > 0
+        stale = [row["path"] for row in payload.get("cfbd", []) if row.get("stale") and not resolved(row["path"])]
         failed = [row["path"] for row in payload.get("cfbd", [])
-                  if row.get("state") == "error"]
+                  if row.get("state") == "error" and not resolved(row["path"])]
         # A spent allowance is still an outage. Publishing a board with
         # last-good inputs can make old ratings, schedules, availability, and
         # matchup stats look current. Accuracy takes precedence over keeping a

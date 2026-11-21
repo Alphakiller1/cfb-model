@@ -42,6 +42,8 @@ letter-spacing:.04em;color:var(--text);font-style:italic}
 .chase-wordmark em{font-style:italic;background:linear-gradient(90deg,var(--v-light),var(--ca-purple));
 -webkit-background-clip:text;background-clip:text;color:transparent}
 .nav-links{display:flex;gap:4px;flex:1;justify-content:center}
+.model-review-links{display:flex;gap:14px;flex-wrap:wrap;margin:20px 0}
+.model-review-links a{display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:8px}
 .nav-link{padding:7px 13px;border-radius:9px;color:var(--text-2);font-size:13.5px;font-weight:600}
 .nav-link:hover{color:var(--text);background:rgba(124,77,255,.12);text-decoration:none}
 .chase-status{display:flex;align-items:center;gap:12px;flex:0 0 auto}

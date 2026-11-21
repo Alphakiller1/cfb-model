@@ -40,6 +40,16 @@ def test_a_spent_allowance_still_blocks_stale_sources(tmp_path):
     assert any("failed" in e for e in errors)
 
 
+def test_fresh_complete_alternate_schedule_resolves_only_schedule_and_optional_consensus(tmp_path):
+    payload = _manifest(schedule_verification={"complete": True, "season": 2026, "week": 3,
+                                               "required": 57, "matched": 57})
+    assert verify(_write(tmp_path, payload)) == []
+    payload["cfbd"].append({"path": "/stats/game/advanced?year=2026&week=2", "state": "stale_snapshot", "stale": True})
+    assert any("stale" in e for e in verify(_write(tmp_path, payload)))
+    payload["schedule_verification"]["matched"] = 56
+    assert any("failed" in e for e in verify(_write(tmp_path, payload)))
+
+
 def test_a_spent_allowance_still_blocks_an_unsound_board(tmp_path):
     """Quota or not, a board with no games or no market is not publishable."""
     empty_slate = _manifest(cfbd_quota_spent=True)

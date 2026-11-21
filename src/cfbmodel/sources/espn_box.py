@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -226,17 +227,23 @@ def game_box(event: dict, season: int, week: int) -> GameBox | None:
 def season_boxes(season: int, *, through_week: int | None = None) -> list[GameBox]:
     """Every completed FBS game of a regular season, up to and including a week."""
     last = through_week if through_week is not None else REGULAR_SEASON_WEEKS
-    out: list[GameBox] = []
+    specs = []
     for week in range(1, last + 1):
         try:
             events = week_events(season, week)
         except Exception:
             continue
-        for event in events:
-            box = game_box(event, season, week)
-            if box and box.completed and box.players:
-                out.append(box)
-    return out
+        specs.extend((event, week) for event in events)
+
+    def read(spec):
+        event, week = spec
+        try:
+            return game_box(event, season, week)
+        except (OSError, ValueError, TypeError):
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return [box for box in pool.map(read, specs) if box and box.completed and box.players]
 
 
 def roster_positions(team_id: str, *, max_age: float = 20 * 3600) -> dict[str, str]:

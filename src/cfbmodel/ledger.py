@@ -528,6 +528,10 @@ def update(
             "player_name": projection.get("player_name"),
             "position": projection.get("position"),
             "model_version": projection.get("model_version"),
+            "outcome_parameters": projection.get("outcome_parameters"),
+            "availability": projection.get("availability"),
+            "predictability": projection.get("predictability"),
+            "profile": projection.get("profile"),
             "metrics": {key: dist.get("mean") for key, dist in
                         (projection.get("stats") or {}).items()
                         if isinstance(dist, dict) and dist.get("mean") is not None},
