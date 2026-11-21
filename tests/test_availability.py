@@ -149,6 +149,8 @@ def test_ruled_out_back_redistributes_carries_and_questionable_stays_flagged():
     assert hurt["rb2"].metrics["rush_yds"] / hurt["rb2"].metrics["rush_car"] == pytest.approx(
         base["rb2"].metrics["rush_yds"] / base["rb2"].metrics["rush_car"])
     assert hurt["qb1"].availability == av.QUESTIONABLE
+    assert hurt["rb2"].profile["role_change_unverified"] is True
+    assert all(p["rank"] == 2 for p in hurt["rb2"].predictability.values())
 
 
 def test_usual_starter_ignores_the_report():

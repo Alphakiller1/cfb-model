@@ -95,6 +95,11 @@ def describe(projection, *, history, info, team, environment, report, status_of,
              if aid != projection.athlete_id and state in ("questionable", "game_time_decision")]
     if peers:
         warnings.append("Unresolved teammate availability can change the allocation: " + ", ".join(sorted(peers)))
+    changing_role = any(abs(projection.metrics.get(key, 0) - opportunity_metrics.get(key, 0))
+                        > .25 * max(abs(opportunity_metrics.get(key, 0)), 1)
+                        for key in ("pass_att", "rush_car", "rec") if key in projection.metrics)
+    if changing_role:
+        warnings.append("Availability changes the observed role substantially; historical efficiency at the larger or smaller workload is unverified")
     recent_means = {key: statistics.fmean(float(getattr(line, key)) for line in lines[:3])
                     for key in projection.metrics if lines}
     developments = {}
@@ -114,6 +119,8 @@ def describe(projection, *, history, info, team, environment, report, status_of,
             rank = 2
         if report is None or projection.availability in ("questionable", "game_time_decision", "out_first_half") or peers:
             rank = max(rank, 2)
+        if changing_role:
+            rank = 2
         label = ("relatively stable", "moderate variability", "uncertain role or availability")[rank]
         predictability[key] = {"label": label, "rank": rank, "p10": dist.get("p10"),
                                "median": dist.get("p50"), "p90": dist.get("p90"),
@@ -133,7 +140,8 @@ def describe(projection, *, history, info, team, environment, report, status_of,
     pass_share = team["pass_att"] / max(team["pass_att"] + team["rush_car"], 1)
     return {
         "predictability": predictability, "forecast_components": components,
-        "profile": {"data_cutoff": {"season": season, "before_week": week},
+        "profile": {"version": "cfb-player-profile/2.0.1", "role_change_unverified": changing_role,
+                    "data_cutoff": {"season": season, "before_week": week},
                     "role_games": sample, "recent_opportunity_cv": cv,
                     "availability": projection.availability,
                     "availability_report": {key: report.to_json().get(key) for key in
